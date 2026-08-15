@@ -1,0 +1,43 @@
+name: Dependency lock refresh
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    name: Refresh lock (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: patient
+            directory: FrontEnd/app_twin-care
+            lockfile: FrontEnd/app_twin-care/package-lock.json
+          - app: back-office
+            directory: FrontEnd/back-office_twin-care
+            lockfile: FrontEnd/back-office_twin-care/package-lock.json
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ matrix.lockfile }}
+      - name: Refresh lock within declared ranges
+        run: npm audit fix --package-lock-only
+      - name: Verify production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Upload refreshed lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: lock-${{ matrix.app }}
+          path: ${{ matrix.lockfile }}
+          if-no-files-found: error
+          retention-days: 1
