@@ -22,27 +22,26 @@ public class ChatbotTriggerEngineService {
         this.catalogService = catalogService;
     }
 
-    public List<ChatbotQuestionDto> selectQuestions(PatientProfile profile,
-                                                    Map<Integer, LocalDateTime> lastAnswerDates,
-                                                    int limit) {
-        List<QuestionDefinition> allQuestions = catalogService.getAllQuestions();
+    public List<ChatbotQuestionDto> selectQuestions(
+            PatientProfile profile,
+            Map<Integer, LocalDateTime> lastAnswerDates,
+            int limit) {
+        if (profile == null || limit <= 0) {
+            return List.of();
+        }
 
-        allQuestions.sort(Comparator.comparingInt(q -> {
-            Priorite p = q.getPriorite();
-            if (p == null) return 4; 
-            switch (p) {
-                case HAUTE: return 1;
-                case MOYENNE: return 2;
-                case FAIBLE: return 3;
-                default: return 4;
-            }
-        }));
+        List<QuestionDefinition> allQuestions = new ArrayList<>(catalogService.getAllQuestions());
+        allQuestions.sort(Comparator.comparingInt(this::priorityRank));
 
         List<ChatbotQuestionDto> selected = new ArrayList<>();
-        for (QuestionDefinition q : allQuestions) {
-            LocalDateTime lastDate = lastAnswerDates != null ? lastAnswerDates.get(q.getId()) : null;
-            if (matchesTrigger(q, profile, lastDate)) {
-                selected.add(new ChatbotQuestionDto(q.getId(), q.getCategorie(), q.getQuestion(), q.getTypeReponse()));
+        for (QuestionDefinition question : allQuestions) {
+            LocalDateTime lastDate = lastAnswerDates != null ? lastAnswerDates.get(question.getId()) : null;
+            if (matchesTrigger(question, profile, lastDate)) {
+                selected.add(new ChatbotQuestionDto(
+                        question.getId(),
+                        question.getCategorie(),
+                        question.getQuestion(),
+                        question.getTypeReponse()));
             }
             if (selected.size() >= limit) {
                 break;
@@ -51,63 +50,113 @@ public class ChatbotTriggerEngineService {
         return selected;
     }
 
-    private boolean matchesTrigger(QuestionDefinition q, PatientProfile profile, LocalDateTime lastAnswerDate) {
-        String trigger = q.getDeclencheur();
+    private int priorityRank(QuestionDefinition question) {
+        Priorite priority = question.getPriorite();
+        if (priority == null) {
+            return 4;
+        }
+        return switch (priority) {
+            case HAUTE -> 1;
+            case MOYENNE -> 2;
+            case FAIBLE -> 3;
+        };
+    }
+
+    private boolean matchesTrigger(
+            QuestionDefinition question,
+            PatientProfile profile,
+            LocalDateTime lastAnswerDate) {
+        String trigger = question.getDeclencheur();
 
         if (lastAnswerDate != null) {
-            if (trigger != null && trigger.startsWith("Tous les")) {
-                long months = extractMonths(trigger);
-                return lastAnswerDate.plusMonths(months).isBefore(LocalDateTime.now());
+            if (trigger == null || !trigger.startsWith("Tous les")) {
+                return false;
             }
-            return false;
+            long months = extractMonths(trigger);
+            return months > 0 && !lastAnswerDate.plusMonths(months).isAfter(LocalDateTime.now());
         }
 
         if (trigger == null || trigger.isBlank() || "Aucun".equalsIgnoreCase(trigger)) {
-            return true; 
+            return true;
         }
 
-        if ("Femme > 50 ans".equalsIgnoreCase(trigger))
-            return profile.getSexe() != null && "FEMME".equalsIgnoreCase(profile.getSexe().toString()) && profile.getAge() != null && profile.getAge() > 50;
-            
-        if ("Femme 25-65 ans".equalsIgnoreCase(trigger))
-            return profile.getSexe() != null && "FEMME".equalsIgnoreCase(profile.getSexe().toString()) && profile.getAge() != null && profile.getAge() >= 25 && profile.getAge() <= 65;
-            
-        if ("Age = 25, 45, 65 ans".equalsIgnoreCase(trigger))
-            return profile.getAge() != null && (profile.getAge() == 25 || profile.getAge() == 45 || profile.getAge() == 65);
+        if ("Femme > 50 ans".equalsIgnoreCase(trigger)) {
+            return profile.getSexe() != null
+                    && "FEMME".equalsIgnoreCase(profile.getSexe().toString())
+                    && profile.getAge() != null
+                    && profile.getAge() > 50;
+        }
 
-        if ("Age > 65 ans".equalsIgnoreCase(trigger))
+        if ("Femme 25-65 ans".equalsIgnoreCase(trigger)) {
+            return profile.getSexe() != null
+                    && "FEMME".equalsIgnoreCase(profile.getSexe().toString())
+                    && profile.getAge() != null
+                    && profile.getAge() >= 25
+                    && profile.getAge() <= 65;
+        }
+
+        if ("Age = 25, 45, 65 ans".equalsIgnoreCase(trigger)) {
+            return profile.getAge() != null
+                    && (profile.getAge() == 25 || profile.getAge() == 45 || profile.getAge() == 65);
+        }
+
+        if ("Age > 65 ans".equalsIgnoreCase(trigger)) {
             return profile.getAge() != null && profile.getAge() > 65;
-            
-        if ("Age > 65 ans + Automne".equalsIgnoreCase(trigger))
-            return profile.getAge() != null && profile.getAge() > 65 && "AUTOMNE".equalsIgnoreCase(profile.getSaison());
+        }
 
-        if ("Si allergies = Oui".equalsIgnoreCase(trigger))
+        if ("Age > 65 ans + Automne".equalsIgnoreCase(trigger)) {
+            return profile.getAge() != null
+                    && profile.getAge() > 65
+                    && "AUTOMNE".equalsIgnoreCase(profile.getSaison());
+        }
+
+        if ("Si allergies = Oui".equalsIgnoreCase(trigger)) {
             return profile.isAllergiesConnues();
-            
-        if ("Si sommeil < 3".equalsIgnoreCase(trigger))
+        }
+
+        if ("Si sommeil < 3".equalsIgnoreCase(trigger)) {
             return profile.getSommeilScore() != null && profile.getSommeilScore() < 3;
-            
-        if ("Si stress > 3".equalsIgnoreCase(trigger))
+        }
+
+        if ("Si stress > 3".equalsIgnoreCase(trigger)) {
             return profile.getStressScore() != null && profile.getStressScore() > 3;
+        }
 
-        if ("Si ronflement = Oui".equalsIgnoreCase(trigger))
-            return true; 
+        // The current PatientProfile does not contain a validated snoring field.
+        // A trigger that cannot be evaluated safely must not fire.
+        if ("Si ronflement = Oui".equalsIgnoreCase(trigger)) {
+            return false;
+        }
 
-        if ("Dossier incomplet".equalsIgnoreCase(trigger))
+        if ("Dossier incomplet".equalsIgnoreCase(trigger)) {
             return profile.isDossierIncomplet();
-            
-        if ("Printemps".equalsIgnoreCase(trigger))
-            return "PRINTEMPS".equalsIgnoreCase(profile.getSaison());
+        }
 
-        return true;
+        if ("Printemps".equalsIgnoreCase(trigger)) {
+            return "PRINTEMPS".equalsIgnoreCase(profile.getSaison());
+        }
+
+        // Fail closed: an unknown or malformed clinical trigger is never treated
+        // as applicable by default.
+        return false;
     }
 
     private long extractMonths(String trigger) {
-        if (trigger.contains("3 mois")) return 3;
-        if (trigger.contains("6 mois")) return 6;
-        if (trigger.contains("1 an") || trigger.contains("ans")) return 12;
-        if (trigger.contains("2 ans")) return 24;
-        if (trigger.contains("3 ans")) return 36;
-        return 0;
+        if (trigger.contains("3 mois")) {
+            return 3;
+        }
+        if (trigger.contains("6 mois")) {
+            return 6;
+        }
+        if (trigger.contains("3 ans")) {
+            return 36;
+        }
+        if (trigger.contains("2 ans")) {
+            return 24;
+        }
+        if (trigger.contains("1 an")) {
+            return 12;
+        }
+        return -1;
     }
 }

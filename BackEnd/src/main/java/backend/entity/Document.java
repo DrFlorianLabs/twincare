@@ -43,6 +43,7 @@ public class Document {
     @Column(nullable = false, length = 255)
     private String nomFichier;
 
+    @JsonIgnore
     @Column(nullable = false, length = 500)
     private String cheminFichier;
 

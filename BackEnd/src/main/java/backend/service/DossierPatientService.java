@@ -17,12 +17,12 @@ public class DossierPatientService {
 
     private final DossierPatientRepository dossierPatientRepository;
     private final DocumentRepository documentRepository;
-
     private final SecurityHelperService securityHelperService;
 
-    public DossierPatientService(DossierPatientRepository dossierPatientRepository,
-                                 DocumentRepository documentRepository,
-                                 SecurityHelperService securityHelperService) {
+    public DossierPatientService(
+            DossierPatientRepository dossierPatientRepository,
+            DocumentRepository documentRepository,
+            SecurityHelperService securityHelperService) {
         this.dossierPatientRepository = dossierPatientRepository;
         this.documentRepository = documentRepository;
         this.securityHelperService = securityHelperService;
@@ -31,12 +31,14 @@ public class DossierPatientService {
     public DossierPatient getByPatientId(Long patientId) {
         securityHelperService.checkPatientAccess(patientId);
         return dossierPatientRepository.findByPatientId(patientId)
-            .orElseThrow(() -> new ResourceNotFoundException("Dossier patient introuvable"));
+                .orElseThrow(() -> new ResourceNotFoundException("Dossier patient introuvable"));
     }
 
     public DossierPatient getById(Long dossierId) {
-        return dossierPatientRepository.findById(dossierId)
+        DossierPatient dossier = dossierPatientRepository.findById(dossierId)
                 .orElseThrow(() -> new ResourceNotFoundException("Dossier introuvable"));
+        securityHelperService.checkDossierAccess(dossier);
+        return dossier;
     }
 
     public void mettreAJourStatutDossier(Long dossierId) {
@@ -55,6 +57,7 @@ public class DossierPatientService {
     }
 
     public List<DossierPatient> getAll() {
+        securityHelperService.requireStaff();
         return dossierPatientRepository.findAll();
     }
 }

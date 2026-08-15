@@ -20,7 +20,6 @@ import backend.dto.ChatbotAnswerRequest;
 import backend.dto.ChatbotQuestionDto;
 import backend.dto.ChatbotSessionResponse;
 import backend.entity.AppUtilisateur;
-import backend.entity.CategorieChatbot;
 import backend.entity.DossierPatient;
 import backend.entity.InteractionChatbot;
 import backend.entity.PatientProfile;
@@ -39,15 +38,15 @@ public class ChatbotSessionService {
     private final InteractionChatbotRepository interactionChatbotRepository;
     private final ChatbotTriggerEngineService triggerEngineService;
     private final ChatbotQuestionCatalogService catalogService;
-
     private final SecurityHelperService securityHelperService;
 
-    public ChatbotSessionService(AppUtilisateurRepository appUtilisateurRepository,
-                                 DossierPatientRepository dossierPatientRepository,
-                                 InteractionChatbotRepository interactionChatbotRepository,
-                                 ChatbotTriggerEngineService triggerEngineService,
-                                 ChatbotQuestionCatalogService catalogService,
-                                 SecurityHelperService securityHelperService) {
+    public ChatbotSessionService(
+            AppUtilisateurRepository appUtilisateurRepository,
+            DossierPatientRepository dossierPatientRepository,
+            InteractionChatbotRepository interactionChatbotRepository,
+            ChatbotTriggerEngineService triggerEngineService,
+            ChatbotQuestionCatalogService catalogService,
+            SecurityHelperService securityHelperService) {
         this.appUtilisateurRepository = appUtilisateurRepository;
         this.dossierPatientRepository = dossierPatientRepository;
         this.interactionChatbotRepository = interactionChatbotRepository;
@@ -55,22 +54,20 @@ public class ChatbotSessionService {
         this.catalogService = catalogService;
         this.securityHelperService = securityHelperService;
     }
-    
+
     public ChatbotSessionResponse demarrerSession(Long patientId, int limit) {
         securityHelperService.checkPatientAccess(patientId);
         AppUtilisateur patient = appUtilisateurRepository.findById(patientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Patient introuvable"));
-
         DossierPatient dossier = dossierPatientRepository.findByPatientId(patientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Dossier introuvable"));
 
-        PatientProfile profile = buildPatientProfile(patient, dossier);
-
+        PatientProfile profile = buildLegacyPatientProfile(patient, dossier);
         Map<Integer, LocalDateTime> lastAnswerDates = new HashMap<>();
         List<QuestionDefinition> allQuestions = catalogService.getAllQuestions();
-        for (QuestionDefinition q : allQuestions) {
-            interactionChatbotRepository.findLastAnswerDateByDossierAndQuestionId(dossier.getId(), q.getId())
-                .ifPresent(date -> lastAnswerDates.put(q.getId(), date));
+        for (QuestionDefinition question : allQuestions) {
+            interactionChatbotRepository.findLastAnswerDateByDossierAndQuestionId(dossier.getId(), question.getId())
+                    .ifPresent(date -> lastAnswerDates.put(question.getId(), date));
         }
 
         List<ChatbotQuestionDto> questions = triggerEngineService.selectQuestions(profile, lastAnswerDates, limit);
@@ -79,99 +76,91 @@ public class ChatbotSessionService {
         response.setPatientId(patientId);
         response.setDossierId(dossier.getId());
         response.setQuestions(questions);
-
         return response;
     }
 
     @Transactional
     public InteractionChatbot enregistrerReponse(Long patientId, Long dossierId, ChatbotAnswerRequest request) {
         securityHelperService.checkPatientAccess(patientId);
+        if (request == null || request.getQuestionId() == null) {
+            throw new BadRequestException("Question obligatoire");
+        }
+
         AppUtilisateur patient = appUtilisateurRepository.findById(patientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Patient introuvable"));
-
         DossierPatient dossier = dossierPatientRepository.findById(dossierId)
                 .orElseThrow(() -> new ResourceNotFoundException("Dossier introuvable"));
 
         if (!dossier.getPatient().getId().equals(patientId)) {
-             throw new BadRequestException("Le dossier n'appartient pas au patient");
-}
+            throw new BadRequestException("Le dossier n'appartient pas au patient");
+        }
+
+        // Never trust question text/category/type echoed by the browser. The
+        // server-side catalog is the canonical source for persisted metadata.
+        QuestionDefinition question = catalogService.getQuestionById(request.getQuestionId());
+        TypeReponseChatbot type = question.getTypeReponse();
+
         InteractionChatbot interaction = new InteractionChatbot();
         interaction.setPatient(patient);
         interaction.setDossierPatient(dossier);
-        interaction.setQuestionId(request.getQuestionId());
-        interaction.setQuestion(request.getQuestion());
-        interaction.setCategorie(request.getCategorie());
-
-        TypeReponseChatbot type = request.getTypeReponse();
+        interaction.setQuestionId(question.getId());
+        interaction.setQuestion(question.getQuestion());
+        interaction.setCategorie(question.getCategorie());
         interaction.setTypeReponse(type);
 
         if (type == TypeReponseChatbot.OUI_NON) {
-            if (request.getReponseTexte() == null ||
-                    (!"OUI".equalsIgnoreCase(request.getReponseTexte()) &&
-                     !"NON".equalsIgnoreCase(request.getReponseTexte()) &&
-                     !"JE_NE_SAIS_PAS".equalsIgnoreCase(request.getReponseTexte()))) {
+            String answer = request.getReponseTexte();
+            if (answer == null
+                    || (!"OUI".equalsIgnoreCase(answer)
+                    && !"NON".equalsIgnoreCase(answer)
+                    && !"JE_NE_SAIS_PAS".equalsIgnoreCase(answer))) {
                 throw new BadRequestException("Réponse OUI/NON/JE_NE_SAIS_PAS invalide");
             }
-            interaction.setReponseTexte(request.getReponseTexte().toUpperCase());
-        }
-
-        if (type == TypeReponseChatbot.ECHELLE_1_5) {
-            if (request.getReponseNumerique() == null || request.getReponseNumerique() < 1 || request.getReponseNumerique() > 5) {
+            interaction.setReponseTexte(answer.toUpperCase());
+        } else if (type == TypeReponseChatbot.ECHELLE_1_5) {
+            Integer answer = request.getReponseNumerique();
+            if (answer == null || answer < 1 || answer > 5) {
                 throw new BadRequestException("La réponse doit être comprise entre 1 et 5");
             }
-            interaction.setReponseNumerique(request.getReponseNumerique());
-        }
-
-        if (type == TypeReponseChatbot.ECHELLE_0_7) {
-            if (request.getReponseNumerique() == null || request.getReponseNumerique() < 0 || request.getReponseNumerique() > 7) {
+            interaction.setReponseNumerique(answer);
+        } else if (type == TypeReponseChatbot.ECHELLE_0_7) {
+            Integer answer = request.getReponseNumerique();
+            if (answer == null || answer < 0 || answer > 7) {
                 throw new BadRequestException("La réponse doit être comprise entre 0 et 7");
             }
-            interaction.setReponseNumerique(request.getReponseNumerique());
-        }
-
-        if (type == TypeReponseChatbot.OUI_NON && "OUI".equalsIgnoreCase(request.getReponseTexte())) {
-            interaction.setARevoirParProfessionnel(true);
-        } else if (type == TypeReponseChatbot.ECHELLE_1_5 && request.getReponseNumerique() != null
-                && request.getReponseNumerique() >= 4) {
-            interaction.setARevoirParProfessionnel(true);
-        } else if (type == TypeReponseChatbot.ECHELLE_0_7 && request.getReponseNumerique() != null
-                && request.getReponseNumerique() >= 5) {
-            interaction.setARevoirParProfessionnel(true);
+            interaction.setReponseNumerique(answer);
         } else {
-            interaction.setARevoirParProfessionnel(false);
+            throw new BadRequestException("Type de réponse non pris en charge");
         }
 
-        log.info("Réponse enregistrée pour le patient {} question {}", patientId, request.getQuestionId());
-        return interactionChatbotRepository.save(interaction);
+        // The prototype's former generic thresholds were not clinically
+        // validated. Do not infer a need for professional review from them.
+        // Future review/tasks belong to typed, versioned clinical rules.
+        interaction.setARevoirParProfessionnel(false);
+
+        InteractionChatbot saved = interactionChatbotRepository.save(interaction);
+        log.info("Legacy preparation answer recorded");
+        return saved;
     }
 
-    private PatientProfile buildPatientProfile(AppUtilisateur patient, DossierPatient dossier) {
+    /**
+     * Compatibility profile for the legacy question engine only. Do not add
+     * new clinical inference here: the V0.1 rule model will replace it.
+     */
+    private PatientProfile buildLegacyPatientProfile(AppUtilisateur patient, DossierPatient dossier) {
         PatientProfile profile = new PatientProfile();
         profile.setPatientId(patient.getId());
-
         profile.setAge(Period.between(patient.getDateNaissance(), LocalDate.now()).getYears());
         profile.setSexe(patient.getSexe());
         profile.setDossierIncomplet(dossier.getDocuments() == null || dossier.getDocuments().isEmpty());
         profile.setSaison(getCurrentSeason());
 
-        List<InteractionChatbot> history = interactionChatbotRepository.findByDossierPatientId(dossier.getId());
-
-        profile.setAllergiesConnues(history.stream()
-                .anyMatch(i -> i.getCategorie() == CategorieChatbot.ENVIRONNEMENT
-                        && "OUI".equalsIgnoreCase(i.getReponseTexte())));
-
-        profile.setSommeilScore(history.stream()
-                .filter(i -> i.getQuestionId() != null && i.getQuestionId() == 13)
-                .map(InteractionChatbot::getReponseNumerique)
-                .findFirst()
-                .orElse(null));
-
-        profile.setStressScore(history.stream()
-                .filter(i -> i.getQuestionId() != null && i.getQuestionId() == 43)
-                .map(InteractionChatbot::getReponseNumerique)
-                .findFirst()
-                .orElse(null));
-
+        // Historical inference used unrelated question/category IDs to derive
+        // allergies, sleep and stress. Until clinically re-specified, leave
+        // those fields unknown instead of manufacturing a value.
+        profile.setAllergiesConnues(false);
+        profile.setSommeilScore(null);
+        profile.setStressScore(null);
         return profile;
     }
 

@@ -1,8 +1,7 @@
 <template>
   <v-container fluid class="pa-0 d-flex flex-column align-center" style="background: linear-gradient(180deg, #cae8fa 0%, #f4f9fd 40%, #f4f9fd 100%); min-height: 100vh; padding-bottom: 100px !important;">
-    
     <div class="d-flex align-center w-100 px-4 mt-8 mb-6" style="max-width: 450px;">
-      <v-btn icon="mdi-arrow-left" variant="text" color="#2c3e50" size="large" @click="$router.go(-1)"></v-btn>
+      <v-btn icon="mdi-arrow-left" variant="text" color="#2c3e50" size="large" @click="$router.go(-1)" />
       <h2 class="text-center flex-grow-1 font-weight-black" style="color: #2c3e50; font-size: 1.25rem; letter-spacing: 0.5px;">
         MES DOCUMENTS
       </h2>
@@ -10,21 +9,20 @@
     </div>
 
     <div class="w-100 px-5 mb-4" style="max-width: 400px;">
-      
       <div v-if="isLoading" class="text-center mt-10">
-        <v-progress-circular indeterminate color="#2A93D5" size="50"></v-progress-circular>
+        <v-progress-circular indeterminate color="#2A93D5" size="50" />
         <p class="mt-4 font-weight-medium" style="color: #37474F;">Chargement de vos documents...</p>
       </div>
 
       <template v-else>
         <v-card v-for="doc in documents" :key="doc.id" class="mb-4 rounded-xl" elevation="2" style="border: 1px solid rgba(42, 147, 213, 0.2);">
           <v-list-item class="pa-4">
-            <template v-slot:prepend>
+            <template #prepend>
               <v-avatar color="#e1f0fa" rounded="lg" size="50">
                 <v-icon color="#2A93D5" size="28">{{ getIconForType(doc.type) }}</v-icon>
               </v-avatar>
             </template>
-            
+
             <v-list-item-title class="font-weight-bold text-body-1 mb-1 d-flex align-center justify-space-between" style="color: #2c3e50;">
               <span class="text-truncate mr-2">{{ formatType(doc.type) }}</span>
               <v-chip size="x-small" :color="getCouleurStatut(doc.statut)" class="font-weight-bold text-white" style="flex-shrink: 0;">
@@ -38,9 +36,9 @@
               Envoyé le : {{ formaterDate(doc.dateDocument) }}
             </v-list-item-subtitle>
 
-            <template v-slot:append>
-              <v-btn icon="mdi-eye-outline" variant="text" color="#2A93D5" class="mr-2" @click="ouvrirDocument(doc)"></v-btn>
-              <v-btn icon="mdi-delete-outline" variant="text" color="#E53935" @click="confirmerSuppression(doc.id)"></v-btn>
+            <template #append>
+              <v-btn icon="mdi-eye-outline" variant="text" color="#2A93D5" class="mr-2" :loading="docEnOuverture === doc.id" @click="ouvrirDocument(doc)" />
+              <v-btn icon="mdi-delete-outline" variant="text" color="#E53935" @click="confirmerSuppression(doc.id)" />
             </template>
           </v-list-item>
         </v-card>
@@ -49,15 +47,12 @@
           <v-avatar color="rgba(255,255,255,0.6)" size="100" class="mb-4">
             <v-icon size="50" color="#90A4AE">mdi-folder-open-outline</v-icon>
           </v-avatar>
-          <span class="text-body-1 font-weight-medium" style="color: #546E7A;">
-            Aucun document n'a été envoyé.
-          </span>
+          <span class="text-body-1 font-weight-medium" style="color: #546E7A;">Aucun document n'a été envoyé.</span>
           <v-btn to="/documents" variant="text" color="#2A93D5" class="mt-4 font-weight-bold text-none">
             Envoyer un document
           </v-btn>
         </div>
       </template>
-
     </div>
 
     <v-dialog v-model="dialogSuppression" max-width="320">
@@ -74,122 +69,107 @@
 
     <v-snackbar v-model="showSnackbar" :color="snackbarColor" elevation="6" rounded="pill" timeout="3000" location="bottom" class="mb-16">
       <div class="d-flex align-center w-100 px-1">
-        <v-icon :icon="snackbarIcon" color="white" class="mr-3" size="24"></v-icon>
+        <v-icon :icon="snackbarIcon" color="white" class="mr-3" size="24" />
         <span class="text-body-2 text-white font-weight-medium">{{ snackbarText }}</span>
-        <v-spacer></v-spacer>
-        <v-btn variant="tonal" color="white" size="small" class="text-none font-weight-bold rounded-pill ml-3" @click="showSnackbar = false">
-          Fermer
-        </v-btn>
+        <v-spacer />
+        <v-btn variant="tonal" color="white" size="small" class="text-none font-weight-bold rounded-pill ml-3" @click="showSnackbar = false">Fermer</v-btn>
       </div>
     </v-snackbar>
-
   </v-container>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-
-const BASE_URL = "https://twincare-t2xu.onrender.com"
-const url = `${BASE_URL}/api/documents`
+import { onMounted, ref } from 'vue'
+import { authFetch, openProtectedDocument } from '../services/api'
 
 const documents = ref([])
 const isLoading = ref(true)
-
+const docEnOuverture = ref(null)
 const showSnackbar = ref(false)
-const snackbarText = ref("")
-const snackbarColor = ref("#2c3e50")
-const snackbarIcon = ref("mdi-check-circle")
-
+const snackbarText = ref('')
+const snackbarColor = ref('#2c3e50')
+const snackbarIcon = ref('mdi-check-circle')
 const dialogSuppression = ref(false)
 const docASupprimer = ref(null)
 const isDeleting = ref(false)
 
-function afficherNotification(message, couleur = "#2c3e50", icone = "mdi-check-circle") {
+function afficherNotification(message, couleur = '#2c3e50', icone = 'mdi-check-circle') {
   snackbarText.value = message
   snackbarColor.value = couleur
   snackbarIcon.value = icone
   showSnackbar.value = true
 }
 
-function chargerDocuments() {
+async function chargerDocuments() {
   isLoading.value = true
-  const token = localStorage.getItem('token')
   const dossierId = localStorage.getItem('dossierId')
-
   if (!dossierId) {
     isLoading.value = false
     return
   }
 
-  fetch(`${url}/dossier/${dossierId}`, {
-    method: "GET",
-    headers: { "Authorization": "Bearer " + token }
-  })
-  .then(res => res.json())
-  .then(data => {
-    documents.value = data
-  })
-  .catch(err => {
-    console.error("Erreur chargement documents :", err)
-    afficherNotification("Erreur de connexion.", "#E53935", "mdi-wifi-strength-1-alert")
-  })
-  .finally(() => {
+  try {
+    const response = await authFetch(`/api/documents/dossier/${dossierId}`)
+    if (!response.ok) throw new Error(`Request failed with status ${response.status}`)
+    documents.value = await response.json()
+  } catch {
+    afficherNotification('Impossible de charger les documents.', '#E53935', 'mdi-wifi-strength-1-alert')
+  } finally {
     isLoading.value = false
-  })
+  }
 }
 
-function ouvrirDocument(doc) {
-  if (!doc.cheminFichier) {
-    afficherNotification("Aucun fichier associé à ce document.", "#E53935", "mdi-alert-circle")
-    return
+async function ouvrirDocument(doc) {
+  docEnOuverture.value = doc.id
+  try {
+    await openProtectedDocument(doc.id)
+  } catch {
+    afficherNotification("Le document n'a pas pu être ouvert.", '#E53935', 'mdi-alert-circle')
+  } finally {
+    docEnOuverture.value = null
   }
-  const filename = doc.cheminFichier.split('/').pop()
-  const fileUrl = `${BASE_URL}/api/files/${filename}`
-  window.open(fileUrl, '_blank')
 }
 
 function formaterDate(dateString) {
-  if (!dateString) return ""
-  const date = new Date(dateString)
-  return date.toLocaleDateString('fr-FR')
+  return dateString ? new Date(dateString).toLocaleDateString('fr-FR') : ''
 }
 
 function formatType(type) {
   const types = {
-    'ORDONNANCE': 'Ordonnance',
-    'BIOLOGIE': 'Résultats Biologie',
-    'IMAGERIE': 'Imagerie médicale',
-    'COURRIER': 'Courrier médical',
-    'CERTIFICAT': 'Certificat',
-    'CERFA': 'Formulaire CERFA',
-    'AUTRE': 'Autre document'
+    ORDONNANCE: 'Ordonnance',
+    BIOLOGIE: 'Résultats Biologie',
+    IMAGERIE: 'Imagerie médicale',
+    COURRIER: 'Courrier médical',
+    CERTIFICAT: 'Certificat',
+    CERFA: 'Formulaire CERFA',
+    AUTRE: 'Autre document'
   }
   return types[type] || type
 }
 
 function getIconForType(type) {
   const icons = {
-    'ORDONNANCE': 'mdi-pill',
-    'BIOLOGIE': 'mdi-flask-outline',
-    'IMAGERIE': 'mdi-radiology-box-outline',
-    'COURRIER': 'mdi-email-outline',
-    'CERTIFICAT': 'mdi-certificate-outline',
-    'CERFA': 'mdi-file-document-edit-outline',
-    'AUTRE': 'mdi-file-document-outline'
+    ORDONNANCE: 'mdi-pill',
+    BIOLOGIE: 'mdi-flask-outline',
+    IMAGERIE: 'mdi-radiology-box-outline',
+    COURRIER: 'mdi-email-outline',
+    CERTIFICAT: 'mdi-certificate-outline',
+    CERFA: 'mdi-file-document-edit-outline',
+    AUTRE: 'mdi-file-document-outline'
   }
   return icons[type] || 'mdi-file-document-outline'
 }
 
 function getCouleurStatut(statut) {
-  if (statut === 'VALIDE') return '#4CAF50';
-  if (statut === 'REFUSE') return '#E53935';
-  return '#FF9800'; 
+  if (statut === 'VALIDE') return '#4CAF50'
+  if (statut === 'REFUSE') return '#E53935'
+  return '#FF9800'
 }
 
 function getTexteStatut(statut) {
-  if (statut === 'VALIDE') return 'Validé';
-  if (statut === 'REFUSE') return 'À refaire';
-  return 'En attente';
+  if (statut === 'VALIDE') return 'Validé'
+  if (statut === 'REFUSE') return 'À refaire'
+  return 'En attente'
 }
 
 function confirmerSuppression(id) {
@@ -197,34 +177,23 @@ function confirmerSuppression(id) {
   dialogSuppression.value = true
 }
 
-function executerSuppression() {
+async function executerSuppression() {
   if (!docASupprimer.value) return
   isDeleting.value = true
-  
-  const token = localStorage.getItem('token')
-  
-  fetch(`${url}/${docASupprimer.value}`, {
-    method: "DELETE",
-    headers: { "Authorization": "Bearer " + token }
-  })
-  .then(response => {
-    if (response.ok) {
-      afficherNotification("Document supprimé.", "#4CAF50", "mdi-delete-empty")
-      documents.value = documents.value.filter(doc => doc.id !== docASupprimer.value)
-    } else if (response.status === 404 || response.status === 405) {
-      afficherNotification("La suppression arrive bientôt !", "#FF9800", "mdi-tools")
-    } else {
-      afficherNotification("Erreur lors de la suppression.", "#E53935", "mdi-alert-circle")
-    }
-  })
-  .catch(() => afficherNotification("Erreur réseau.", "#E53935", "mdi-wifi-strength-1-alert"))
-  .finally(() => {
+
+  try {
+    const response = await authFetch(`/api/documents/${docASupprimer.value}`, { method: 'DELETE' })
+    if (!response.ok) throw new Error(`Delete failed with status ${response.status}`)
+    documents.value = documents.value.filter(doc => doc.id !== docASupprimer.value)
+    afficherNotification('Document supprimé.', '#4CAF50', 'mdi-delete-empty')
+  } catch {
+    afficherNotification("Le document n'a pas pu être supprimé.", '#E53935', 'mdi-alert-circle')
+  } finally {
     isDeleting.value = false
     dialogSuppression.value = false
-  })
+    docASupprimer.value = null
+  }
 }
 
-onMounted(() => {
-  chargerDocuments()
-})
+onMounted(chargerDocuments)
 </script>

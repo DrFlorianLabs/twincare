@@ -9,30 +9,28 @@
           <h1 class="text-h4 font-weight-bold" style="color: #4CAF50;">Twin Care</h1>
         </div>
 
-        <v-alert v-if="erreur" type="error" variant="tonal" class="mb-4">
-          {{ erreur }}
-        </v-alert>
+        <v-alert v-if="erreur" type="error" variant="tonal" class="mb-4">{{ erreur }}</v-alert>
 
         <v-form @submit.prevent="soumettreConnexion" :disabled="chargement">
           <v-text-field
             v-model="email"
             label="Adresse e-mail"
+            autocomplete="username"
             prepend-inner-icon="mdi-email-outline"
             variant="outlined"
             class="mb-2"
             required
-          ></v-text-field>
-
+          />
           <v-text-field
             v-model="motDePasse"
             label="Mot de passe"
             type="password"
+            autocomplete="current-password"
             prepend-inner-icon="mdi-lock-outline"
             variant="outlined"
             class="mb-6"
             required
-          ></v-text-field>
-
+          />
           <v-btn
             type="submit"
             color="#156500"
@@ -40,6 +38,7 @@
             block
             class="text-white font-weight-bold rounded-lg"
             :loading="chargement"
+            :disabled="!email.trim() || !motDePasse"
           >
             Se connecter
           </v-btn>
@@ -60,40 +59,42 @@ const motDePasse = ref('')
 const erreur = ref('')
 const chargement = ref(false)
 
-const soumettreConnexion = async () => {
+async function soumettreConnexion() {
+  if (chargement.value) return
   chargement.value = true
   erreur.value = ''
 
   try {
-    const reponse = await api.post('/api/auth/login', {
-      email: email.value,
+    const response = await api.post('/api/auth/login', {
+      email: email.value.trim(),
       motDePasse: motDePasse.value
     })
 
-    const token = reponse.data.token
-    const role = reponse.data.role
-    const userId = reponse.data.patientId
-
-    if (token) {
-      localStorage.setItem('token', token)
-      localStorage.setItem('role', role)
-      localStorage.setItem('userId', userId)
-
-      if (role === 'MEDECIN') {
-        router.push('/medecin')
-      } else if (role === 'ASSISTANT_MEDICAL' || role === 'ASSISTANT') {
-        router.push('/assistant')
-      } else {
-        erreur.value = "Votre rôle n'est pas reconnu par l'application."
-      }
+    const { token, role, patientId: userId } = response.data
+    if (!token || !role || !userId) {
+      throw new Error('Malformed authentication response')
     }
-  } catch (err) {
-    if (err.response && err.response.status === 403) {
-      erreur.value = "Identifiants incorrects."
-    } else if (err.response && err.response.status === 404) {
-      erreur.value = "Utilisateur introuvable."
+
+    if (role !== 'MEDECIN' && role !== 'ASSISTANT_MEDICAL' && role !== 'ADMIN') {
+      erreur.value = "Ce compte n'est pas autorisé sur l'interface professionnelle."
+      return
+    }
+
+    localStorage.setItem('token', token)
+    localStorage.setItem('role', role)
+    localStorage.setItem('userId', String(userId))
+
+    if (role === 'MEDECIN' || role === 'ADMIN') {
+      await router.push('/medecin')
     } else {
-      erreur.value = "Erreur de connexion au serveur."
+      await router.push('/assistant')
+    }
+  } catch (error) {
+    const status = error.response?.status
+    if ([400, 401, 403, 404].includes(status)) {
+      erreur.value = 'Identifiants incorrects.'
+    } else {
+      erreur.value = 'Le service est momentanément indisponible.'
     }
   } finally {
     chargement.value = false

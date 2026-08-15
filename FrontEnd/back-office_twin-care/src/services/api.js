@@ -1,26 +1,56 @@
 import axios from 'axios'
 
-// Création de l'instance Axios pointant vers ton serveur Render
+const configuredBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim()
+
 const api = axios.create({
-  baseURL: 'https://twincare-t2xu.onrender.com', 
+  baseURL: configuredBaseUrl.replace(/\/$/, ''),
   headers: {
-    'Content-Type': 'application/json'
+    Accept: 'application/json'
   }
 })
 
-// Intercepteur : Ajoute automatiquement le "badge" (Token) à chaque requête
-// C'est indispensable car tes collègues ont sécurisé les routes (TEST-03 du rapport !)
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
   }
-)
+  return config
+})
+
+export async function openProtectedDocument(documentId) {
+  if (!Number.isInteger(Number(documentId))) {
+    throw new Error('Invalid document identifier')
+  }
+
+  const previewWindow = window.open('', '_blank')
+  if (previewWindow) {
+    previewWindow.opener = null
+  }
+
+  try {
+    const response = await api.get(`/api/documents/${documentId}/content`, {
+      responseType: 'blob',
+      headers: { Accept: 'application/pdf,image/jpeg,image/png' }
+    })
+
+    const objectUrl = URL.createObjectURL(response.data)
+    if (previewWindow) {
+      previewWindow.location.replace(objectUrl)
+    } else {
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      link.click()
+    }
+
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  } catch (error) {
+    if (previewWindow && !previewWindow.closed) {
+      previewWindow.close()
+    }
+    throw error
+  }
+}
 
 export default api

@@ -12,15 +12,37 @@ public class ValidationRequest {
     @Size(max = 1000)
     private String commentaire;
 
-    @NotNull
+    /**
+     * Deprecated compatibility field for the historical frontend. The backend
+     * deliberately ignores it and derives the validation actor exclusively
+     * from the authenticated security context.
+     */
+    @Deprecated
     private Long assistantMedicalId;
 
-    public DecisionValidation getDecision() { return decision; }
-    public void setDecision(DecisionValidation decision) { this.decision = decision; }
+    public DecisionValidation getDecision() {
+        return decision;
+    }
 
-    public String getCommentaire() { return commentaire; }
-    public void setCommentaire(String commentaire) { this.commentaire = commentaire; }
+    public void setDecision(DecisionValidation decision) {
+        this.decision = decision;
+    }
 
-    public Long getAssistantMedicalId() { return assistantMedicalId; }
-    public void setAssistantMedicalId(Long assistantMedicalId) { this.assistantMedicalId = assistantMedicalId; }
+    public String getCommentaire() {
+        return commentaire;
+    }
+
+    public void setCommentaire(String commentaire) {
+        this.commentaire = commentaire;
+    }
+
+    @Deprecated
+    public Long getAssistantMedicalId() {
+        return assistantMedicalId;
+    }
+
+    @Deprecated
+    public void setAssistantMedicalId(Long assistantMedicalId) {
+        this.assistantMedicalId = assistantMedicalId;
+    }
 }
