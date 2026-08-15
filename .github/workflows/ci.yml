@@ -51,5 +51,7 @@ jobs:
           cache-dependency-path: ${{ matrix.lockfile }}
       - name: Install locked dependencies
         run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
       - name: Build
         run: npm run build
