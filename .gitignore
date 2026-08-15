@@ -1,1 +1,22 @@
+# Dependencies
 **/node_modules/
+
+# Runtime/local data
+BackEnd/uploads/
+**/uploads/
+*.log
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# OS/editor noise
+.DS_Store
+**/.DS_Store
+desktop.ini
+**/desktop.ini
+
+# Build outputs
+**/target/
+**/dist/

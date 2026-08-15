@@ -1,12 +1,13 @@
 package backend.service;
 
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+
 import backend.dao.QuestionRepository;
 import backend.entity.Question;
 import backend.entity.QuestionDefinition;
-import org.springframework.stereotype.Service;
-
-import java.util.List;
-import java.util.stream.Collectors;
+import backend.exception.ResourceNotFoundException;
 
 @Service
 public class ChatbotQuestionCatalogService {
@@ -18,16 +19,27 @@ public class ChatbotQuestionCatalogService {
     }
 
     public List<QuestionDefinition> getAllQuestions() {
-        List<Question> questions = questionRepository.findAllByOrderByPrioriteAsc();
-        return questions.stream()
-                .map(q -> new QuestionDefinition(
-                        q.getId(),
-                        q.getCategorie(),
-                        q.getTexte(),
-                        q.getTypeReponse(),
-                        q.getDeclencheur(),
-                        q.getPriorite()
-                ))
-                .collect(Collectors.toList());
+        return questionRepository.findAllByOrderByPrioriteAsc().stream()
+                .map(this::toDefinition)
+                .toList();
+    }
+
+    public QuestionDefinition getQuestionById(Integer questionId) {
+        if (questionId == null) {
+            throw new ResourceNotFoundException("Question introuvable");
+        }
+        Question question = questionRepository.findById(questionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Question introuvable"));
+        return toDefinition(question);
+    }
+
+    private QuestionDefinition toDefinition(Question question) {
+        return new QuestionDefinition(
+                question.getId(),
+                question.getCategorie(),
+                question.getTexte(),
+                question.getTypeReponse(),
+                question.getDeclencheur(),
+                question.getPriorite());
     }
 }

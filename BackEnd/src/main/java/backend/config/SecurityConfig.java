@@ -1,9 +1,12 @@
 package backend.config;
 
+import java.util.Arrays;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -24,11 +27,18 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtFilter;
     private final CustomUserDetailsService userService;
+    private final List<String> allowedOrigins;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtFilter,
-            CustomUserDetailsService userService) {
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtFilter,
+            CustomUserDetailsService userService,
+            @Value("${app.cors.allowed-origins}") String allowedOrigins) {
         this.jwtFilter = jwtFilter;
         this.userService = userService;
+        this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isBlank())
+                .toList();
     }
 
     @Bean
@@ -36,62 +46,57 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/test", "/h2-console/**").permitAll()
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/api/files/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/register")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/auth/reset-password")
+                        .hasAuthority("ADMIN")
 
+                        .requestMatchers(HttpMethod.DELETE, "/api/users/**")
+                        .hasAuthority("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/users", "/api/users/**")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
                         .requestMatchers("/api/users/**")
-                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
+                        .hasAuthority("ADMIN")
 
+                        .requestMatchers(HttpMethod.GET, "/api/dossiers")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
                         .requestMatchers("/api/dossiers/**")
-                        .hasAnyAuthority("PATIENT", "ASSISTANT_MEDICAL", "MEDECIN")
+                        .hasAnyAuthority("PATIENT", "ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
 
                         .requestMatchers("/api/documents/**")
-                        .hasAnyAuthority("PATIENT", "ASSISTANT_MEDICAL", "MEDECIN")
+                        .hasAnyAuthority("PATIENT", "ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
 
                         .requestMatchers("/api/validations/**")
-                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
-
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
                         .requestMatchers("/api/interactions/**")
-                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
 
                         .requestMatchers("/api/chatbot/**")
-                        .hasAnyAuthority("PATIENT")
+                        .hasAuthority("PATIENT")
 
-                        .requestMatchers("/api/parcours/**")
-                        .hasAnyAuthority("PATIENT", "ASSISTANT_MEDICAL", "MEDECIN")
-
-                        .requestMatchers("/api/environnement/**")
-                        .hasAnyAuthority("PATIENT")
+                        // Historical prototype APIs are intentionally dormant in V0.1.
+                        .requestMatchers("/api/parcours/**", "/api/environnement/**")
+                        .denyAll()
 
                         .requestMatchers("/api/admin/**")
-                        .hasAnyAuthority("ADMIN")
+                        .hasAuthority("ADMIN")
 
                         .anyRequest().authenticated())
                 .userDetailsService(userService);
 
         http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
-
         return http.build();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(
-                "http://localhost:3000",
-                "http://localhost:3001",
-                "http://192.168.56.1:3000",
-                "http://192.168.1.17:3000",
-                "http://192.168.1.118:3000",
-                "http://localhost:5173",
-                "https://twincare-t2xu.onrender.com",
-                "https://twin-care-patient.onrender.com",
-                "https://twincare-backoffice.onrender.com"));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
+        config.setAllowedOrigins(allowedOrigins);
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
