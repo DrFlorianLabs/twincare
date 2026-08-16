@@ -8,26 +8,26 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import backend.dao.AppUtilisateurRepository;
 import backend.entity.AppUtilisateur;
+import backend.service.UtilisateurService;
 
 @RestController
 @RequestMapping("/api/users")
 public class UtilisateurController {
 
-    private final AppUtilisateurRepository utilisateurRepository;
+    private final UtilisateurService utilisateurService;
 
-    public UtilisateurController(AppUtilisateurRepository utilisateurRepository) {
-        this.utilisateurRepository = utilisateurRepository;
+    public UtilisateurController(UtilisateurService utilisateurService) {
+        this.utilisateurService = utilisateurService;
     }
 
     @GetMapping
     public List<AppUtilisateur> getAllUsers() {
-        return utilisateurRepository.findAll();
+        return utilisateurService.getAllUsers();
     }
 
     @DeleteMapping("/{userId}")
     public void deleteUser(@PathVariable Long userId) {
-        utilisateurRepository.deleteById(userId);
+        utilisateurService.deletePatient(userId);
     }
 }

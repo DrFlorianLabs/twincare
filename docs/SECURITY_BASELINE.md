@@ -58,6 +58,9 @@ An object identifier, storage filename or UUID is **not** an authorization mecha
 - Preserve the original filename only as display metadata after sanitisation.
 - Block path traversal and symlink escape.
 - Delete stored bytes when document metadata is deleted, with a recoverable cleanup strategy as persistence evolves.
+- Keep metadata and bytes consistent across transaction failure: quarantine
+  deletions until database commit, restore them on rollback, remove new uploads
+  on rollback, and reconcile interrupted quarantines at startup.
 
 ## 6. Logs
 
@@ -119,3 +122,15 @@ Before a real-health-data pilot, automated tests must cover at minimum:
 Production-like use requires an environment appropriate for French health data, with encryption, backups, recovery procedures, secrets management, monitoring, audit controls and the applicable hosting/compliance requirements assessed explicitly.
 
 The current repository must not imply that a generic demo deployment is sufficient for real health data.
+
+Interactive API documentation is disabled by default. If it is explicitly
+enabled for a controlled environment, the HTTP security boundary restricts it
+to authenticated administrators.
+
+Before connecting an existing database, inspect its `flyway_schema_history` and
+schema state. Prototype migration V3 is destructive and must never be replayed
+over a populated legacy schema. Existing schemas without Flyway history must be
+baselined at version 4 only after their structure and backups have been verified.
+Startup also fails closed if a schema-history version older than V3 coexists
+with legacy application tables; that state requires an explicit, backed-up
+migration decision rather than an automatic destructive replay.

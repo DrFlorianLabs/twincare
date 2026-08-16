@@ -7,21 +7,21 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import backend.dao.InteractionChatbotRepository;
 import backend.entity.InteractionChatbot;
+import backend.service.InteractionChatbotService;
 
 @RestController
 @RequestMapping("/api/interactions")
 public class InteractionChatbotController {
 
-    private final InteractionChatbotRepository interactionRepository;
+    private final InteractionChatbotService interactionService;
 
-    public InteractionChatbotController(InteractionChatbotRepository interactionRepository) {
-        this.interactionRepository = interactionRepository;
+    public InteractionChatbotController(InteractionChatbotService interactionService) {
+        this.interactionService = interactionService;
     }
 
     @GetMapping("/dossier/{dossierId}")
     public List<InteractionChatbot> getByDossier(@PathVariable Long dossierId) {
-        return interactionRepository.findByDossierPatientId(dossierId);
+        return interactionService.getByDossier(dossierId);
     }
 }

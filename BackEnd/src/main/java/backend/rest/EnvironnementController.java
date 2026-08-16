@@ -1,5 +1,6 @@
 package backend.rest;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -9,6 +10,7 @@ import backend.dto.EnvironnementDTO;
 import backend.service.EnvironnementService;
 
 @RestController
+@Profile("legacy-environnement")
 @RequestMapping("/api/environnement")
 public class EnvironnementController {
 

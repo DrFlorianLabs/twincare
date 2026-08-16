@@ -68,12 +68,17 @@ public class ChatbotTriggerEngineService {
             LocalDateTime lastAnswerDate) {
         String trigger = question.getDeclencheur();
 
-        if (lastAnswerDate != null) {
-            if (trigger == null || !trigger.startsWith("Tous les")) {
+        if (trigger != null && trigger.startsWith("Tous les")) {
+            long months = extractMonths(trigger);
+            if (months <= 0) {
                 return false;
             }
-            long months = extractMonths(trigger);
-            return months > 0 && !lastAnswerDate.plusMonths(months).isAfter(LocalDateTime.now());
+            return lastAnswerDate == null
+                    || !lastAnswerDate.plusMonths(months).isAfter(LocalDateTime.now());
+        }
+
+        if (lastAnswerDate != null) {
+            return false;
         }
 
         if (trigger == null || trigger.isBlank() || "Aucun".equalsIgnoreCase(trigger)) {
@@ -154,7 +159,7 @@ public class ChatbotTriggerEngineService {
         if (trigger.contains("2 ans")) {
             return 24;
         }
-        if (trigger.contains("1 an")) {
+        if (trigger.contains("Tous les ans") || trigger.contains("1 an")) {
             return 12;
         }
         return -1;

@@ -86,6 +86,39 @@ class ChatbotTriggerEngineServiceTest {
         assertThat(selected).isEmpty();
     }
 
+    @Test
+    void recurrenceIsOfferedWhenItHasNeverBeenAnswered() {
+        when(catalogService.getAllQuestions()).thenReturn(List.of(question(1, "Tous les 2 ans")));
+
+        var selected = engine.selectQuestions(new PatientProfile(), Map.of(), 5);
+
+        assertThat(selected).hasSize(1);
+    }
+
+    @Test
+    void annualCatalogWordingFiresAfterThirteenMonths() {
+        when(catalogService.getAllQuestions()).thenReturn(List.of(question(1, "Tous les ans")));
+
+        var selected = engine.selectQuestions(
+                new PatientProfile(),
+                Map.of(1, LocalDateTime.now().minusMonths(13)),
+                5);
+
+        assertThat(selected).hasSize(1);
+    }
+
+    @Test
+    void annualCatalogWordingDoesNotFireAfterElevenMonths() {
+        when(catalogService.getAllQuestions()).thenReturn(List.of(question(1, "Tous les ans")));
+
+        var selected = engine.selectQuestions(
+                new PatientProfile(),
+                Map.of(1, LocalDateTime.now().minusMonths(11)),
+                5);
+
+        assertThat(selected).isEmpty();
+    }
+
     private QuestionDefinition question(int id, String trigger) {
         return new QuestionDefinition(
                 id,

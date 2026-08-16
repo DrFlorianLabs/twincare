@@ -70,6 +70,13 @@ public class SecurityHelperService {
         }
     }
 
+    public void requireAdmin() {
+        AppUtilisateur currentUser = getCurrentUser();
+        if (currentUser.getRole() != Role.ADMIN) {
+            throw new UnauthorizedActionException("Accès réservé aux administrateurs");
+        }
+    }
+
     private boolean isStaff(Role role) {
         return role == Role.ASSISTANT_MEDICAL || role == Role.MEDECIN || role == Role.ADMIN;
     }

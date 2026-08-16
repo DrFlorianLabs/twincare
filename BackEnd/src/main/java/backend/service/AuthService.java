@@ -28,18 +28,21 @@ public class AuthService {
     private final PasswordEncoder encoder;
     private final JwtService jwtService;
     private final CustomUserDetailsService userDetailsService;
+    private final SecurityHelperService securityHelperService;
 
     public AuthService(
             AppUtilisateurRepository repo,
             DossierPatientRepository dossierRepo,
             PasswordEncoder encoder,
             JwtService jwtService,
-            CustomUserDetailsService userDetailsService) {
+            CustomUserDetailsService userDetailsService,
+            SecurityHelperService securityHelperService) {
         this.repo = repo;
         this.dossierRepo = dossierRepo;
         this.encoder = encoder;
         this.jwtService = jwtService;
         this.userDetailsService = userDetailsService;
+        this.securityHelperService = securityHelperService;
     }
 
     /**
@@ -49,6 +52,7 @@ public class AuthService {
      */
     @Transactional
     public AuthResponse register(RegisterRequest req) {
+        securityHelperService.requireStaff();
         if (req.getEmail() == null || req.getEmail().isBlank()) {
             throw new BadRequestException("Email obligatoire");
         }
@@ -132,6 +136,7 @@ public class AuthService {
      */
     @Transactional
     public void resetPassword(ResetPasswordRequest req) {
+        securityHelperService.requireAdmin();
         if (req.getEmail() == null || req.getEmail().isBlank()
                 || req.getNouveauMotDePasse() == null || req.getNouveauMotDePasse().isBlank()) {
             throw new BadRequestException("Données de réinitialisation invalides");

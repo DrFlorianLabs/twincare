@@ -26,6 +26,7 @@ public class DocumentService {
     private final DocumentRepository documentRepository;
     private final DossierPatientRepository dossierPatientRepository;
     private final FileStorageService fileStorageService;
+    private final FileTransactionService fileTransactionService;
     private final DossierPatientService dossierPatientService;
     private final SecurityHelperService securityHelperService;
 
@@ -33,11 +34,13 @@ public class DocumentService {
             DocumentRepository documentRepository,
             DossierPatientRepository dossierPatientRepository,
             FileStorageService fileStorageService,
+            FileTransactionService fileTransactionService,
             DossierPatientService dossierPatientService,
             SecurityHelperService securityHelperService) {
         this.documentRepository = documentRepository;
         this.dossierPatientRepository = dossierPatientRepository;
         this.fileStorageService = fileStorageService;
+        this.fileTransactionService = fileTransactionService;
         this.dossierPatientService = dossierPatientService;
         this.securityHelperService = securityHelperService;
     }
@@ -59,31 +62,25 @@ public class DocumentService {
         }
 
         String storedFilename = fileStorageService.storeFile(file);
-        try {
-            Document document = new Document();
-            document.setType(request.getType());
-            document.setDateDocument(request.getDateDocument());
-            document.setNomFichier(fileStorageService.sanitizeDisplayFilename(file.getOriginalFilename()));
-            document.setCheminFichier(storedFilename);
-            document.setPrescripteur(request.getPrescripteur());
-            document.setCommentairePatient(request.getCommentairePatient());
-            document.setStatut(StatutDocument.EN_ATTENTE);
-            document.setDossierPatient(dossier);
+        fileTransactionService.deleteStoredFileOnRollback(storedFilename);
 
-            Document saved = documentRepository.save(document);
-            dossierPatientService.mettreAJourStatutDossier(dossierId);
-            log.info("Document stored");
-            return saved;
-        } catch (RuntimeException e) {
-            try {
-                fileStorageService.deleteFile(storedFilename);
-            } catch (RuntimeException cleanupFailure) {
-                e.addSuppressed(cleanupFailure);
-            }
-            throw e;
-        }
+        Document document = new Document();
+        document.setType(request.getType());
+        document.setDateDocument(request.getDateDocument());
+        document.setNomFichier(fileStorageService.sanitizeDisplayFilename(file.getOriginalFilename()));
+        document.setCheminFichier(storedFilename);
+        document.setPrescripteur(request.getPrescripteur());
+        document.setCommentairePatient(request.getCommentairePatient());
+        document.setStatut(StatutDocument.EN_ATTENTE);
+        document.setDossierPatient(dossier);
+
+        Document saved = documentRepository.save(document);
+        dossierPatientService.mettreAJourStatutDossier(dossierId);
+        log.info("Document stored");
+        return saved;
     }
 
+    @Transactional(readOnly = true)
     public List<Document> getDocumentsByDossier(Long dossierId) {
         DossierPatient dossier = dossierPatientRepository.findById(dossierId)
                 .orElseThrow(() -> new ResourceNotFoundException("Dossier introuvable"));
@@ -91,12 +88,14 @@ public class DocumentService {
         return documentRepository.findByDossierPatientId(dossierId);
     }
 
+    @Transactional(readOnly = true)
     public Document getById(Long documentId) {
         Document document = findDocument(documentId);
         securityHelperService.checkDocumentAccess(document);
         return document;
     }
 
+    @Transactional(readOnly = true)
     public DocumentContent getContent(Long documentId) {
         Document document = findDocument(documentId);
         securityHelperService.checkDocumentAccess(document);
@@ -113,7 +112,7 @@ public class DocumentService {
         securityHelperService.checkDocumentAccess(document);
         Long dossierId = document.getDossierPatient().getId();
 
-        fileStorageService.deleteFile(document.getCheminFichier());
+        fileTransactionService.stageDeletionAfterCommit(document.getCheminFichier());
         documentRepository.delete(document);
         documentRepository.flush();
         dossierPatientService.mettreAJourStatutDossier(dossierId);
