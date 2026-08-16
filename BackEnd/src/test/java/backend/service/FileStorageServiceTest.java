@@ -2,13 +2,19 @@ package backend.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 
 import backend.exception.BadRequestException;
 
@@ -76,6 +82,25 @@ class FileStorageServiceTest {
     }
 
     @Test
+    void removesPartiallyWrittenFileWhenStorageFails() throws Exception {
+        FileStorageService storage = new FileStorageService(tempDir.toString(), 1_000_000);
+        MultipartFile file = mock(MultipartFile.class);
+        when(file.isEmpty()).thenReturn(false);
+        when(file.getSize()).thenReturn(20L);
+        when(file.getContentType()).thenReturn("application/pdf");
+        when(file.getInputStream()).thenReturn(
+                new ByteArrayInputStream("%PDF-1.7".getBytes()),
+                new FailingInputStream());
+
+        assertThatThrownBy(() -> storage.storeFile(file))
+                .isInstanceOf(IllegalStateException.class);
+
+        try (var files = Files.list(tempDir)) {
+            assertThat(files).isEmpty();
+        }
+    }
+
+    @Test
     void rejectsTraversalInsteadOfResolvingArbitraryPaths() {
         FileStorageService storage = new FileStorageService(tempDir.toString(), 1_000_000);
 
@@ -90,5 +115,43 @@ class FileStorageServiceTest {
 
         assertThat(storage.sanitizeDisplayFilename("../../patient/document.pdf"))
                 .isEqualTo("document.pdf");
+    }
+
+    @Test
+    void stagesRestoresAndFinalizesDeletion() throws Exception {
+        FileStorageService storage = new FileStorageService(tempDir.toString(), 1_000_000);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "synthetic.pdf",
+                "application/pdf",
+                "%PDF-1.7\nsynthetic test content".getBytes());
+
+        String storageKey = storage.storeFile(file);
+        var stagedDeletion = storage.stageDeletion(storageKey);
+
+        assertThat(stagedDeletion.existed()).isTrue();
+        assertThat(storage.listStagedDeletionKeys()).containsExactly(storageKey);
+        assertThat(Files.exists(tempDir.resolve(storageKey))).isFalse();
+
+        storage.restoreStagedDeletion(stagedDeletion);
+        assertThat(Files.exists(tempDir.resolve(storageKey))).isTrue();
+
+        var stagedAgain = storage.stageDeletion(storageKey);
+        storage.finalizeStagedDeletion(stagedAgain);
+        assertThat(storage.listStagedDeletionKeys()).isEmpty();
+    }
+
+    private static final class FailingInputStream extends InputStream {
+
+        private final byte[] prefix = "%PDF-".getBytes();
+        private int index;
+
+        @Override
+        public int read() throws IOException {
+            if (index < prefix.length) {
+                return prefix[index++];
+            }
+            throw new IOException("Synthetic storage failure");
+        }
     }
 }

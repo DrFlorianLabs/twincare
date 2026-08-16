@@ -55,6 +55,7 @@ public class ChatbotSessionService {
         this.securityHelperService = securityHelperService;
     }
 
+    @Transactional(readOnly = true)
     public ChatbotSessionResponse demarrerSession(Long patientId, int limit) {
         securityHelperService.checkPatientAccess(patientId);
         AppUtilisateur patient = appUtilisateurRepository.findById(patientId)

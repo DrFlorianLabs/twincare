@@ -1,0 +1,22 @@
+version: 2
+
+updates:
+  - package-ecosystem: maven
+    directory: /BackEnd
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: /FrontEnd/app_twin-care
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: /FrontEnd/back-office_twin-care
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

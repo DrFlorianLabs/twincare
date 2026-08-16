@@ -2,10 +2,13 @@ package backend.service;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -32,12 +35,14 @@ public class FileStorageService {
             "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\.(pdf|jpg|png)$");
 
     private final Path uploadPath;
+    private final Path stagedDeletionPath;
     private final long maxFileSizeBytes;
 
     public FileStorageService(
             @Value("${file.upload-dir}") String uploadDir,
             @Value("${file.max-size-bytes}") long maxFileSizeBytes) {
         this.uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
+        this.stagedDeletionPath = this.uploadPath.resolve(".pending-deletions");
         this.maxFileSizeBytes = maxFileSizeBytes;
     }
 
@@ -49,12 +54,17 @@ public class FileStorageService {
         Path target = resolveStoragePath(storageKey);
 
         try {
-            Files.createDirectories(uploadPath);
+            ensureDirectory(uploadPath);
             try (InputStream inputStream = file.getInputStream()) {
                 Files.copy(inputStream, target);
             }
             return storageKey;
         } catch (IOException e) {
+            try {
+                Files.deleteIfExists(target);
+            } catch (IOException cleanupFailure) {
+                e.addSuppressed(cleanupFailure);
+            }
             throw new IllegalStateException("Impossible d'enregistrer le document", e);
         }
     }
@@ -94,6 +104,81 @@ public class FileStorageService {
             Files.deleteIfExists(path);
         } catch (IOException e) {
             throw new IllegalStateException("Impossible de supprimer le document stocké", e);
+        }
+    }
+
+    public StagedFileDeletion stageDeletion(String storageKey) {
+        Path source = resolveStoragePath(storageKey);
+        Path staged = resolveStagedDeletionPath(storageKey);
+
+        try {
+            ensureDirectory(uploadPath);
+            ensureDirectory(stagedDeletionPath);
+
+            if (!Files.exists(source, LinkOption.NOFOLLOW_LINKS)) {
+                return new StagedFileDeletion(storageKey, false);
+            }
+            if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(source)) {
+                throw new IllegalStateException("Le document stocké n'est pas un fichier régulier");
+            }
+
+            move(source, staged);
+            return new StagedFileDeletion(storageKey, true);
+        } catch (IOException e) {
+            throw new IllegalStateException("Impossible de préparer la suppression du document", e);
+        }
+    }
+
+    public void restoreStagedDeletion(StagedFileDeletion stagedDeletion) {
+        if (stagedDeletion == null || !stagedDeletion.existed()) {
+            return;
+        }
+
+        Path staged = resolveStagedDeletionPath(stagedDeletion.storageKey());
+        Path target = resolveStoragePath(stagedDeletion.storageKey());
+        try {
+            if (!Files.exists(staged, LinkOption.NOFOLLOW_LINKS)) {
+                return;
+            }
+            ensureDirectory(uploadPath);
+            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IllegalStateException("Impossible de restaurer le document stocké");
+            }
+            move(staged, target);
+        } catch (IOException e) {
+            throw new IllegalStateException("Impossible de restaurer le document stocké", e);
+        }
+    }
+
+    public void finalizeStagedDeletion(StagedFileDeletion stagedDeletion) {
+        if (stagedDeletion == null || !stagedDeletion.existed()) {
+            return;
+        }
+
+        Path staged = resolveStagedDeletionPath(stagedDeletion.storageKey());
+        try {
+            Files.deleteIfExists(staged);
+        } catch (IOException e) {
+            throw new IllegalStateException("Impossible de finaliser la suppression du document", e);
+        }
+    }
+
+    public List<String> listStagedDeletionKeys() {
+        if (!Files.isDirectory(stagedDeletionPath, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(stagedDeletionPath)) {
+            return List.of();
+        }
+
+        try (var files = Files.list(stagedDeletionPath)) {
+            return files
+                    .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                    .filter(path -> !Files.isSymbolicLink(path))
+                    .map(path -> path.getFileName().toString())
+                    .filter(this::isValidStorageKey)
+                    .sorted()
+                    .toList();
+        } catch (IOException e) {
+            throw new IllegalStateException("Impossible de parcourir les suppressions en attente", e);
         }
     }
 
@@ -185,9 +270,40 @@ public class FileStorageService {
         return resolved;
     }
 
-    private void validateStorageKey(String storageKey) {
-        if (storageKey == null || !STORAGE_KEY_PATTERN.matcher(storageKey).matches()) {
+    private Path resolveStagedDeletionPath(String storageKey) {
+        validateStorageKey(storageKey);
+        Path resolved = stagedDeletionPath.resolve(storageKey).normalize();
+        if (!resolved.getParent().equals(stagedDeletionPath)) {
             throw new BadRequestException("Référence de stockage invalide");
         }
+        return resolved;
+    }
+
+    private void ensureDirectory(Path directory) throws IOException {
+        Files.createDirectories(directory);
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(directory)) {
+            throw new IOException("Répertoire de stockage invalide");
+        }
+    }
+
+    private void move(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(source, target);
+        }
+    }
+
+    private void validateStorageKey(String storageKey) {
+        if (!isValidStorageKey(storageKey)) {
+            throw new BadRequestException("Référence de stockage invalide");
+        }
+    }
+
+    private boolean isValidStorageKey(String storageKey) {
+        return storageKey != null && STORAGE_KEY_PATTERN.matcher(storageKey).matches();
+    }
+
+    public record StagedFileDeletion(String storageKey, boolean existed) {
     }
 }

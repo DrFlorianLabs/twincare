@@ -3,6 +3,7 @@ package backend.service;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import backend.dao.DocumentRepository;
 import backend.dao.DossierPatientRepository;
@@ -28,12 +29,14 @@ public class DossierPatientService {
         this.securityHelperService = securityHelperService;
     }
 
+    @Transactional(readOnly = true)
     public DossierPatient getByPatientId(Long patientId) {
         securityHelperService.checkPatientAccess(patientId);
         return dossierPatientRepository.findByPatientId(patientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Dossier patient introuvable"));
     }
 
+    @Transactional(readOnly = true)
     public DossierPatient getById(Long dossierId) {
         DossierPatient dossier = dossierPatientRepository.findById(dossierId)
                 .orElseThrow(() -> new ResourceNotFoundException("Dossier introuvable"));
@@ -41,6 +44,7 @@ public class DossierPatientService {
         return dossier;
     }
 
+    @Transactional
     public void mettreAJourStatutDossier(Long dossierId) {
         DossierPatient dossier = getById(dossierId);
         List<Document> documents = documentRepository.findByDossierPatientId(dossierId);
@@ -56,6 +60,7 @@ public class DossierPatientService {
         dossierPatientRepository.save(dossier);
     }
 
+    @Transactional(readOnly = true)
     public List<DossierPatient> getAll() {
         securityHelperService.requireStaff();
         return dossierPatientRepository.findAll();

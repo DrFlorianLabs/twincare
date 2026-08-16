@@ -40,6 +40,24 @@ Sprint 0 is complete when:
 - Remove identifying information from critical logs.
 - Require explicit JWT secret.
 - Restrict account creation/reset behavior.
+- Enforce privileged account and sensitive-object checks at the service boundary,
+  in addition to HTTP route rules.
+- Coordinate document bytes with database transactions: uploads are removed on
+  rollback, deletions are quarantined until commit, and interrupted cleanups are
+  reconciled from document metadata at startup.
+
+### Corrective review gates
+
+- Malformed bearer tokens produce an authentication failure rather than a
+  generic server error.
+- Security integration tests exercise anonymous access, cross-patient access,
+  privileged endpoints and deletion of patient document bytes.
+- A dedicated Flyway test verifies that baselining a populated legacy schema at
+  version 4 preserves existing data instead of replaying destructive prototype
+  migration V3.
+- The back-office development proxy is local/configurable and contains no
+  mandatory hosted-provider URL.
+- Maven, npm and GitHub Actions dependency updates are monitored weekly.
 
 ### Still required before real-patient pilot
 
@@ -61,6 +79,8 @@ The existing trigger engine is a prototype asset only. Current question content 
 - Unknown triggers must fail closed.
 - Broken recurrence parsing is fixed/tested.
 - No new clinical question content is added to the legacy engine.
+- Historical environmental-health beans are excluded from the default runtime;
+  their profile remains legacy-only and the routes stay denied.
 
 ### Next implementation
 
