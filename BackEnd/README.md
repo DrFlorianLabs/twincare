@@ -14,7 +14,11 @@ Set these values outside source control:
 - `CORS_ALLOWED_ORIGINS` for the deployed frontends;
 - `PATIENT_CORS_ALLOWED_ORIGINS` for patient frontends only; never include a
   professional application origin;
-- `FILE_UPLOAD_DIR` to a private, persistent and backed-up storage location.
+- `FILE_UPLOAD_DIR` to a private, persistent and backed-up storage location;
+- `PREPARATION_ATTACHMENT_STORAGE_DIR` to a distinct private and persistent
+  location for preparation-case attachments;
+- `PREPARATION_MULTIPART_TEMP_DIR` to a distinct private temporary location on
+  the same trusted host, outside Git and the historical upload root.
 
 Optional settings include `JWT_EXPIRATION_MS`, `FILE_MAX_SIZE_BYTES`,
 `PATIENT_INVITATION_TTL`, `PATIENT_INVITATION_TOKEN_KEY_ID`,
@@ -22,6 +26,12 @@ Optional settings include `JWT_EXPIRATION_MS`, `FILE_MAX_SIZE_BYTES`,
 `SPRINGDOC_ENABLED`. Patient session cookies are secure by default; disabling
 that flag is limited to an explicit local HTTP setup. API documentation is
 disabled by default and restricted to administrators when enabled.
+
+Optional preparation-attachment settings are
+`PREPARATION_ATTACHMENT_MAX_SIZE_BYTES` (hard ceiling 10 MiB) and
+`PREPARATION_ATTACHMENT_ORPHAN_GRACE`. The configured persistent and temporary
+directories must be writable only by the application identity. On POSIX
+filesystems the application enforces owner-only directory/file permissions.
 
 ## Authentication and provisioning
 
@@ -71,6 +81,12 @@ clinical body, and repeats authorization after acquiring the case, invitation
 and session locks. Identical retries are no-ops. No read, submission,
 questionnaire or classification endpoint is included in this slice.
 
+`PUT`, `GET` and `DELETE /api/v1/patient-access/attachment` respectively create
+or replace one optional PDF/JPEG/PNG, return metadata only, and remove it
+idempotently. Upload is limited to one in-flight request per patient session,
+10 MiB of actual bytes, exact MIME/signature agreement and a sanitized filename.
+The patient API never exposes bytes, scope identifiers, storage keys or digests.
+
 ## Database safety
 
 Flyway migration V3 is a destructive historical prototype migration and is kept
@@ -94,6 +110,15 @@ reconciled from metadata at startup after interruption.
 The local filesystem implementation is suitable for development only unless the
 deployment supplies durable private storage, encryption, backups and tested
 recovery appropriate to its risk and compliance requirements.
+
+Preparation attachments use their own storage root with `.staging` and
+`.pending-deletions` directories. Multipart parsing spools to the separate
+private temporary directory before validation. Startup purges abandoned
+temporary/staging objects, reconciles promotion/deletion windows against
+metadata and refuses to start if referenced bytes are missing or recovery
+fails. Diagnose and restore the persistent storage before restarting; do not
+delete metadata merely to force readiness without an authorized incident and
+recovery decision.
 
 ## Tests
 

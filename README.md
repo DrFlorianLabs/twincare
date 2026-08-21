@@ -48,6 +48,7 @@ Le suivi longitudinal des maladies chroniques reste un horizon produit ultérieu
 - [`docs/adr/0002-patient-invitation-credential-exchange.md`](docs/adr/0002-patient-invitation-credential-exchange.md) — invitation patient à usage unique et session bornée.
 - [`docs/adr/0003-patient-session-authentication-and-csrf.md`](docs/adr/0003-patient-session-authentication-and-csrf.md) — authentification de session patient et protection CSRF.
 - [`docs/adr/0004-patient-declared-consultation-reason.md`](docs/adr/0004-patient-declared-consultation-reason.md) — motif libre déclaré par le patient et écriture transactionnelle.
+- [`docs/adr/0005-patient-preparation-attachment.md`](docs/adr/0005-patient-preparation-attachment.md) — pièce jointe patient bornée, stockage privé et cohérence transactionnelle.
 
 Les prototypes, captures et documents historiques présents dans `artifacts/` documentent l'origine du projet mais ne constituent pas la spécification fonctionnelle courante.
 

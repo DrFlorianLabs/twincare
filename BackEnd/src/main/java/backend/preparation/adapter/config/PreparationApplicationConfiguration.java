@@ -8,7 +8,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Value;
 
 import backend.preparation.application.port.in.CreatePreparationCaseUseCase;
+import backend.preparation.application.port.in.PutPatientAttachmentUseCase;
 import backend.preparation.application.port.in.ResolvePatientAccessSessionUseCase;
+import backend.preparation.application.port.out.AttachmentIdGenerator;
+import backend.preparation.application.port.out.AttachmentStorageTransaction;
 import backend.preparation.application.port.out.PatientAccessSessionIdGenerator;
 import backend.preparation.application.port.out.PatientAccessSessionRepository;
 import backend.preparation.application.port.out.PatientInvitationExchangeGuard;
@@ -17,13 +20,20 @@ import backend.preparation.application.port.out.PatientInvitationRepository;
 import backend.preparation.application.port.out.PreparationCaseAuthorization;
 import backend.preparation.application.port.out.PreparationCaseIdGenerator;
 import backend.preparation.application.port.out.PreparationCaseRepository;
+import backend.preparation.application.port.out.PreparationAttachmentRepository;
+import backend.preparation.application.port.out.PrivateAttachmentStorage;
 import backend.preparation.application.port.out.SecureTokenDigester;
 import backend.preparation.application.port.out.SecureTokenGenerator;
 import backend.preparation.application.service.CreatePreparationCaseService;
+import backend.preparation.application.service.CommitStagedPatientAttachmentService;
+import backend.preparation.application.service.DeletePatientAttachmentService;
 import backend.preparation.application.service.EndPatientAccessSessionService;
 import backend.preparation.application.service.ExchangePatientInvitationService;
+import backend.preparation.application.service.GetPatientAttachmentService;
 import backend.preparation.application.service.IssuePatientInvitationService;
 import backend.preparation.application.service.RecordPatientReasonService;
+import backend.preparation.application.service.PatientAttachmentScopeLock;
+import backend.preparation.application.service.PutPatientAttachmentCoordinator;
 import backend.preparation.application.service.RevokePatientInvitationService;
 import backend.preparation.application.service.ResolvePatientAccessSessionService;
 
@@ -104,5 +114,38 @@ public class PreparationApplicationConfiguration {
         var patientReason = new RecordPatientReasonService(
                 preparationCases, invitations, accessSessions, preparationClock);
         return new TransactionalPatientSessionUseCases(resolve, end, patientReason);
+    }
+
+    @Bean
+    TransactionalPatientAttachmentUseCases transactionalPatientAttachmentUseCases(
+            PreparationCaseRepository preparationCases,
+            PatientInvitationRepository invitations,
+            PatientAccessSessionRepository accessSessions,
+            PreparationAttachmentRepository attachments,
+            AttachmentIdGenerator attachmentIdGenerator,
+            AttachmentStorageTransaction attachmentStorageTransaction,
+            Clock preparationClock) {
+        var scopeLock = new PatientAttachmentScopeLock(
+                preparationCases,
+                invitations,
+                accessSessions,
+                attachments,
+                preparationClock);
+        var commit = new CommitStagedPatientAttachmentService(
+                scopeLock,
+                attachments,
+                attachmentIdGenerator,
+                attachmentStorageTransaction);
+        var get = new GetPatientAttachmentService(scopeLock);
+        var delete = new DeletePatientAttachmentService(
+                scopeLock, attachments, attachmentStorageTransaction);
+        return new TransactionalPatientAttachmentUseCases(commit, get, delete);
+    }
+
+    @Bean
+    PutPatientAttachmentUseCase putPatientAttachmentUseCase(
+            PrivateAttachmentStorage storage,
+            TransactionalPatientAttachmentUseCases transactionalUseCases) {
+        return new PutPatientAttachmentCoordinator(storage, transactionalUseCases);
     }
 }

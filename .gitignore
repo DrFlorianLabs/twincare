@@ -4,6 +4,11 @@
 # Runtime/local data
 BackEnd/uploads/
 **/uploads/
+BackEnd/runtime/
+**/preparation-attachments/
+**/preparation-attachment-storage/
+**/private-multipart/
+**/twincare-private-multipart/
 *.log
 
 # Secrets and local environment

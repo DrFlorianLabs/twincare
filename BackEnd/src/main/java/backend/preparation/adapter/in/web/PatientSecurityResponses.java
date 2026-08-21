@@ -39,6 +39,23 @@ public final class PatientSecurityResponses {
         write(response, HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Format de requête patient non pris en charge", false);
     }
 
+    public void payloadTooLarge(HttpServletResponse response) throws IOException {
+        write(response, HttpStatus.PAYLOAD_TOO_LARGE, "Pièce jointe patient trop volumineuse", false);
+    }
+
+    public void notFound(HttpServletResponse response) throws IOException {
+        write(response, HttpStatus.NOT_FOUND, "Pièce jointe patient introuvable", false);
+    }
+
+    public void serviceUnavailable(HttpServletResponse response) throws IOException {
+        write(response, HttpStatus.SERVICE_UNAVAILABLE, "Stockage patient temporairement indisponible", false);
+    }
+
+    public void tooManyRequests(HttpServletResponse response) throws IOException {
+        response.setHeader(HttpHeaders.RETRY_AFTER, "1");
+        write(response, HttpStatus.TOO_MANY_REQUESTS, "Téléversement patient déjà en cours", false);
+    }
+
     public ResponseCookie expiredSessionCookie() {
         return ResponseCookie.from(PatientAccessController.SESSION_COOKIE, "")
                 .httpOnly(true)

@@ -141,6 +141,24 @@ browser supplies neither scope nor provenance. The use case revalidates the
 session after acquiring the shared case, invitation and session locks, and no
 clinical text enters ordinary logs or security events.
 
+## 4.5 Patient attachment boundary
+
+The bounded patient attachment capability is defined in
+[`adr/0005-patient-preparation-attachment.md`](adr/0005-patient-preparation-attachment.md).
+It is a separate `PreparationAttachment` owned by exactly one organization and
+one `PreparationCase`; it does not reuse or enlarge the historical dossier and
+document model. V0.1 currently permits one optional PDF, JPEG or PNG of at most
+10 MiB. The patient API exposes metadata only and derives every scope identifier
+and the `PATIENT_UPLOADED` provenance on the server.
+
+Raw bytes are behind a TwinCare-owned storage port. The local adapter uses an
+opaque key in a dedicated private root, stages bytes before the database
+transaction and coordinates promotion, replacement and deletion with commit or
+rollback callbacks. Startup reconciliation repairs interrupted operations and
+fails closed when metadata references missing bytes or cleanup cannot be
+completed. Multipart parser temporary files use a separate private directory;
+they never enter the historical upload root or Git.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:
@@ -185,6 +203,7 @@ Rules:
 - MIME type and file signature are validated on upload;
 - repository and logs never contain document content;
 - deletion removes both metadata and stored bytes or emits a recoverable cleanup task;
+- parser temporary files are isolated in a private, access-restricted runtime directory;
 - storage implementation remains replaceable by local/HDS-compatible object storage later.
 
 ## 8. Frontend boundary

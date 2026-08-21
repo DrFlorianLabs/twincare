@@ -3,6 +3,7 @@ package backend.preparation.adapter.in.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -12,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -28,12 +30,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.mock.web.MockMultipartFile;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -43,7 +47,9 @@ import backend.entity.AppUtilisateur;
 import backend.entity.Role;
 import backend.entity.Sexe;
 import backend.preparation.application.port.out.PatientAccessSessionRepository;
+import backend.preparation.application.port.out.PrivateAttachmentStorage;
 import backend.preparation.application.port.out.SecureTokenDigester;
+import backend.preparation.domain.AttachmentStorageKey;
 import backend.preparation.domain.SecureToken;
 import backend.security.JwtService;
 import backend.security.UtilisateurSecurite;
@@ -74,6 +80,8 @@ class PatientInvitationApiSecurityIntegrationTest {
     private PatientAccessSessionRepository accessSessionRepository;
     @Autowired
     private SecureTokenDigester secureTokenDigester;
+    @Autowired
+    private PrivateAttachmentStorage attachmentStorage;
 
     private AppUtilisateur physician;
 
@@ -507,6 +515,184 @@ class PatientInvitationApiSecurityIntegrationTest {
     }
 
     @Test
+    void patientCreatesReadsReplacesAndDeletesOneBoundedAttachment() throws Exception {
+        UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-patient-attachment");
+        IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
+        String sessionToken = exchangedSessionToken(invitation.token());
+        String csrfToken = csrfFor(sessionToken);
+
+        patientAttachmentGet(sessionToken)
+                .andExpect(status().isNotFound())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
+
+        byte[] firstBytes = validPdf("SYNTHETIC-FIRST");
+        MvcResult created = patientAttachmentPut(
+                sessionToken,
+                csrfToken,
+                "http://localhost:3000",
+                new MockMultipartFile("file", "../compte-rendu.exe", MediaType.APPLICATION_PDF_VALUE, firstBytes))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(header().string("Referrer-Policy", "no-referrer"))
+                .andExpect(jsonPath("$.displayFilename").value("compte-rendu.pdf"))
+                .andExpect(jsonPath("$.mediaType").value(MediaType.APPLICATION_PDF_VALUE))
+                .andExpect(jsonPath("$.sizeBytes").value(firstBytes.length))
+                .andExpect(jsonPath("$.preparationCaseId").doesNotExist())
+                .andExpect(jsonPath("$.organizationId").doesNotExist())
+                .andExpect(jsonPath("$.storageKey").doesNotExist())
+                .andExpect(jsonPath("$.digest").doesNotExist())
+                .andReturn();
+
+        Map<String, Object> firstRow = jdbcTemplate.queryForMap(
+                "SELECT storage_key, sha256_digest, version, provenance FROM preparation_attachment WHERE preparation_case_id = ?",
+                caseId);
+        assertThat(firstRow)
+                .containsEntry("VERSION", 0L)
+                .containsEntry("PROVENANCE", "PATIENT_UPLOADED");
+        assertThat(firstRow.get("SHA256_DIGEST").toString()).hasSize(64);
+
+        patientAttachmentGet(sessionToken)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayFilename").value("compte-rendu.pdf"))
+                .andExpect(jsonPath("$.uploadedAt").value(json(created).get("uploadedAt").toString()));
+
+        patientAttachmentPut(
+                sessionToken,
+                csrfToken,
+                "http://localhost:3000",
+                new MockMultipartFile("file", "../compte-rendu.exe", MediaType.APPLICATION_PDF_VALUE, firstBytes))
+                .andExpect(status().isOk());
+        Map<String, Object> identicalRow = jdbcTemplate.queryForMap(
+                "SELECT storage_key, version FROM preparation_attachment WHERE preparation_case_id = ?", caseId);
+        assertThat(identicalRow)
+                .containsEntry("STORAGE_KEY", firstRow.get("STORAGE_KEY"))
+                .containsEntry("VERSION", 0L);
+
+        byte[] replacementBytes = validPng();
+        patientAttachmentPut(
+                sessionToken,
+                csrfToken,
+                "http://localhost:3000",
+                new MockMultipartFile("file", "résultat.png", MediaType.IMAGE_PNG_VALUE, replacementBytes))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayFilename").value("résultat.png"))
+                .andExpect(jsonPath("$.mediaType").value(MediaType.IMAGE_PNG_VALUE));
+        Map<String, Object> replacedRow = jdbcTemplate.queryForMap(
+                "SELECT storage_key, version FROM preparation_attachment WHERE preparation_case_id = ?", caseId);
+        assertThat(replacedRow.get("STORAGE_KEY")).isNotEqualTo(firstRow.get("STORAGE_KEY"));
+        assertThat(replacedRow).containsEntry("VERSION", 1L);
+
+        patientAttachmentDelete(sessionToken, csrfToken, "http://localhost:3000")
+                .andExpect(status().isNoContent());
+        patientAttachmentDelete(sessionToken, csrfToken, "http://localhost:3000")
+                .andExpect(status().isNoContent());
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM preparation_attachment WHERE preparation_case_id = ?",
+                Integer.class,
+                caseId)).isZero();
+        patientAttachmentGet(sessionToken).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void patientAttachmentRejectsMissingScopeCsrfOriginPartsAndForgedContent() throws Exception {
+        UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-patient-attachment-guards");
+        IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
+        String sessionToken = exchangedSessionToken(invitation.token());
+        String csrfToken = csrfFor(sessionToken);
+        MockMultipartFile valid = new MockMultipartFile(
+                "file", "synthetic.pdf", MediaType.APPLICATION_PDF_VALUE, validPdf("SYNTHETIC-GUARDS"));
+
+        patientAttachmentPut(null, csrfToken, "http://localhost:3000", valid)
+                .andExpect(status().isUnauthorized());
+        patientAttachmentPut(sessionToken, null, "http://localhost:3000", valid)
+                .andExpect(status().isForbidden());
+        patientAttachmentPut(sessionToken, csrfToken, null, valid)
+                .andExpect(status().isForbidden());
+        patientAttachmentPut(sessionToken, csrfToken, "http://localhost:5173", valid)
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(multipart(HttpMethod.PUT, "/api/v1/patient-access/attachment")
+                        .file(valid)
+                        .file(new MockMultipartFile(
+                                "unexpected", "other.pdf", MediaType.APPLICATION_PDF_VALUE, validPdf("OTHER")))
+                        .cookie(sessionCookie(sessionToken))
+                        .header(PatientCsrfTokenRepository.HEADER_NAME, csrfToken)
+                        .header(HttpHeaders.ORIGIN, "http://localhost:3000"))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
+
+        patientAttachmentPut(
+                sessionToken,
+                csrfToken,
+                "http://localhost:3000",
+                new MockMultipartFile("file", "forged.pdf", MediaType.APPLICATION_PDF_VALUE, "not-a-pdf".getBytes()))
+                .andExpect(status().isUnsupportedMediaType());
+        patientAttachmentPut(
+                sessionToken,
+                csrfToken,
+                "http://localhost:3000",
+                new MockMultipartFile("file", "truncated.pdf", MediaType.APPLICATION_PDF_VALUE, "%PDF-1.7".getBytes()))
+                .andExpect(status().isUnsupportedMediaType());
+        patientAttachmentPut(
+                sessionToken,
+                csrfToken,
+                "http://localhost:3000",
+                new MockMultipartFile("file", "mismatch.png", MediaType.IMAGE_PNG_VALUE, validPdf("MISMATCH")))
+                .andExpect(status().isUnsupportedMediaType());
+
+        mockMvc.perform(post("/api/v1/patient-access/attachment")
+                        .cookie(sessionCookie(sessionToken))
+                        .header(PatientCsrfTokenRepository.HEADER_NAME, csrfToken)
+                        .header(HttpHeaders.ORIGIN, "http://localhost:3000"))
+                .andExpect(status().isForbidden());
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM preparation_attachment", Integer.class))
+                .isZero();
+    }
+
+    @RepeatedTest(3)
+    void concurrentAttachmentReplacementAndProfessionalRevocationNeverFailOpen() throws Exception {
+        UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-patient-attachment-revoke");
+        IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
+        String sessionToken = exchangedSessionToken(invitation.token());
+        String csrfToken = csrfFor(sessionToken);
+        patientAttachmentPut(
+                sessionToken,
+                csrfToken,
+                "http://localhost:3000",
+                new MockMultipartFile(
+                        "file", "initial.pdf", MediaType.APPLICATION_PDF_VALUE, validPdf("INITIAL")))
+                .andExpect(status().isCreated());
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var replacement = executor.submit(() -> {
+                start.await();
+                return patientAttachmentPut(
+                        sessionToken,
+                        csrfToken,
+                        "http://localhost:3000",
+                        new MockMultipartFile(
+                                "file", "replacement.pdf", MediaType.APPLICATION_PDF_VALUE,
+                                validPdf("REPLACEMENT")))
+                        .andReturn().getResponse().getStatus();
+            });
+            var revocation = executor.submit(() -> {
+                start.await();
+                return revokeInvitation(ORGANIZATION_A, caseId, invitation.id(), physician)
+                        .andReturn().getResponse().getStatus();
+            });
+            start.countDown();
+
+            assertThat(revocation.get()).isEqualTo(204);
+            assertThat(replacement.get()).isIn(200, 401);
+        }
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT revoked_at IS NOT NULL FROM patient_access_session WHERE preparation_case_id = ?",
+                Boolean.class,
+                caseId)).isTrue();
+    }
+
+    @Test
     void unknownPatientRoutesRemainFailClosed() throws Exception {
         UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-session-unknown-route");
         IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
@@ -661,6 +847,8 @@ class PatientInvitationApiSecurityIntegrationTest {
         String sessionToken;
         String csrfToken;
         String patientReasonMarker = "PHI-SYNTHETIC-MARKER-DO-NOT-LOG";
+        String attachmentFilenameMarker = "PHI-SYNTHETIC-FILENAME-DO-NOT-LOG.pdf";
+        String attachmentContentMarker = "PHI-SYNTHETIC-ATTACHMENT-DO-NOT-LOG";
 
         try {
             UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-log-safety");
@@ -675,6 +863,16 @@ class PatientInvitationApiSecurityIntegrationTest {
                     "http://localhost:3000",
                     "{\"reason\":\"%s\"}".formatted(patientReasonMarker))
                     .andExpect(status().isNoContent());
+            patientAttachmentPut(
+                    sessionToken,
+                    csrfToken,
+                    "http://localhost:3000",
+                    new MockMultipartFile(
+                            "file",
+                            attachmentFilenameMarker,
+                            MediaType.APPLICATION_PDF_VALUE,
+                            validPdf(attachmentContentMarker)))
+                    .andExpect(status().isCreated());
         } finally {
             rootLogger.detachAppender(appender);
             appender.stop();
@@ -685,7 +883,9 @@ class PatientInvitationApiSecurityIntegrationTest {
                 .noneMatch(message -> message.contains(invitationToken)
                         || message.contains(sessionToken)
                         || message.contains(csrfToken)
-                        || message.contains(patientReasonMarker));
+                        || message.contains(patientReasonMarker)
+                        || message.contains(attachmentFilenameMarker)
+                        || message.contains(attachmentContentMarker));
     }
 
     private UUID createCase(String organizationId, AppUtilisateur user, String appointmentReference) throws Exception {
@@ -778,6 +978,55 @@ class PatientInvitationApiSecurityIntegrationTest {
         return mockMvc.perform(request);
     }
 
+    private org.springframework.test.web.servlet.ResultActions patientAttachmentPut(
+            String sessionToken,
+            String csrfToken,
+            String origin,
+            MockMultipartFile file) throws Exception {
+        var request = multipart(HttpMethod.PUT, "/api/v1/patient-access/attachment")
+                .file(file);
+        if (sessionToken != null) {
+            request.cookie(sessionCookie(sessionToken));
+        }
+        if (csrfToken != null) {
+            request.header(PatientCsrfTokenRepository.HEADER_NAME, csrfToken);
+        }
+        if (origin != null) {
+            request.header(HttpHeaders.ORIGIN, origin);
+        }
+        return mockMvc.perform(request);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions patientAttachmentGet(
+            String sessionToken) throws Exception {
+        return mockMvc.perform(get("/api/v1/patient-access/attachment")
+                .cookie(sessionCookie(sessionToken)));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions patientAttachmentDelete(
+            String sessionToken,
+            String csrfToken,
+            String origin) throws Exception {
+        return mockMvc.perform(delete("/api/v1/patient-access/attachment")
+                .cookie(sessionCookie(sessionToken))
+                .header(PatientCsrfTokenRepository.HEADER_NAME, csrfToken)
+                .header(HttpHeaders.ORIGIN, origin));
+    }
+
+    private byte[] validPdf(String marker) {
+        return ("%PDF-1.7\n" + marker + "\n%%EOF")
+                .getBytes(StandardCharsets.US_ASCII);
+    }
+
+    private byte[] validPng() {
+        return new byte[] {
+                (byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+                0x00, 0x00, 0x00, 0x00,
+                0x49, 0x45, 0x4e, 0x44,
+                (byte) 0xae, 0x42, 0x60, (byte) 0x82
+        };
+    }
+
     private int patientReasonStatusAfter(
             CountDownLatch start,
             String sessionToken,
@@ -829,6 +1078,9 @@ class PatientInvitationApiSecurityIntegrationTest {
     }
 
     private void clearPreparationData() {
+        jdbcTemplate.queryForList("SELECT storage_key FROM preparation_attachment", UUID.class)
+                .forEach(storageKey -> attachmentStorage.deleteFinal(new AttachmentStorageKey(storageKey)));
+        jdbcTemplate.update("DELETE FROM preparation_attachment");
         jdbcTemplate.update("DELETE FROM patient_access_session");
         jdbcTemplate.update("DELETE FROM patient_invitation");
         jdbcTemplate.update("DELETE FROM preparation_case");
