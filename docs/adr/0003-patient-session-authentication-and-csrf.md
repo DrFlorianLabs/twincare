@@ -28,6 +28,8 @@ Only these routes exist:
   cookie authority;
 - `GET /session`, authenticated by the opaque patient cookie;
 - `DELETE /session`, authenticated and protected by CSRF plus strict origin;
+- `PUT /reason`, authenticated and protected by CSRF plus strict origin as
+  defined by ADR 0004;
 - every other path or method is denied.
 
 The general JWT chain remains separate and continues to protect staff and
@@ -70,13 +72,13 @@ The patient and professional CORS allowlists are separate. Deployments must
 use a same-site patient frontend/API topology for the strict session cookie and
 must not add professional origins to the patient allowlist.
 
-### Logout and future writes
+### Logout and clinical writes
 
 `DELETE /session` is the first cookie-authenticated mutation. It persists
 revocation, clears the cookie and is idempotent if a concurrent professional
 revocation already won.
 
-For any future clinical mutation, the filter grant is not sufficient on its
+For any clinical mutation, the filter grant is not sufficient on its
 own. The use case must revalidate inside its transaction with this lock order:
 
 1. scalar session scope lookup;
@@ -85,6 +87,9 @@ own. The use case must revalidate inside its transaction with this lock order:
 4. patient session lock;
 5. full state/scope/expiry/revocation validation;
 6. domain mutation.
+
+The first implementation of this rule is the patient-declared reason in
+[`0004-patient-declared-consultation-reason.md`](0004-patient-declared-consultation-reason.md).
 
 This preserves the `case -> invitation -> session` order already used by the
 invitation lifecycle and prevents a concurrent revocation from being bypassed.

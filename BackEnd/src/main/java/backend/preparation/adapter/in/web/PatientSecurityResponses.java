@@ -31,6 +31,14 @@ public final class PatientSecurityResponses {
         write(response, HttpStatus.FORBIDDEN, "Requête patient refusée", false);
     }
 
+    public void badRequest(HttpServletResponse response) throws IOException {
+        write(response, HttpStatus.BAD_REQUEST, "Requête patient invalide", false);
+    }
+
+    public void unsupportedMediaType(HttpServletResponse response) throws IOException {
+        write(response, HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Format de requête patient non pris en charge", false);
+    }
+
     public ResponseCookie expiredSessionCookie() {
         return ResponseCookie.from(PatientAccessController.SESSION_COOKIE, "")
                 .httpOnly(true)

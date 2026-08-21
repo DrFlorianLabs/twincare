@@ -351,6 +351,15 @@ class PatientInvitationServicesTest {
         }
 
         @Override
+        public Optional<backend.preparation.application.port.out.PatientAccessSessionScope> findScopeByIdentity(
+                UUID id,
+                PatientInvitationId invitationId,
+                PreparationCaseId preparationCaseId,
+                OrganizationId organizationId) {
+            return Optional.empty();
+        }
+
+        @Override
         public Optional<PatientAccessSession> findByIdForUpdate(
                 UUID id,
                 PatientInvitationId invitationId,

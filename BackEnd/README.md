@@ -65,6 +65,12 @@ request sends that header and an exact patient `Origin`. `DELETE
 clears the session cookie. All other patient paths remain denied until their
 transactional authorization is implemented and tested.
 
+`PUT /api/v1/patient-access/reason` records the single patient-declared reason
+for the scoped preparation case. It accepts only a JSON `reason`, returns no
+clinical body, and repeats authorization after acquiring the case, invitation
+and session locks. Identical retries are no-ops. No read, submission,
+questionnaire or classification endpoint is included in this slice.
+
 ## Database safety
 
 Flyway migration V3 is a destructive historical prototype migration and is kept

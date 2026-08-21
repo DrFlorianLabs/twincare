@@ -21,7 +21,6 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
-import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -79,9 +78,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(csrfTokenRepository)
                         .csrfTokenRequestHandler(csrfRequestHandler)
-                        .requireCsrfProtectionMatcher(SecurityConfig::requiresPatientCsrf)
-                        .ignoringRequestMatchers(new AntPathRequestMatcher(
-                                "/api/v1/patient-access/exchange", HttpMethod.POST.name())))
+                        .requireCsrfProtectionMatcher(SecurityConfig::requiresPatientCsrf))
                 .cors(cors -> cors.configurationSource(patientCorsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(exceptions -> exceptions
@@ -93,6 +90,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/patient-access/exchange")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/patient-access/session")
+                        .hasAuthority(PatientPreparationPrincipal.AUTHORITY)
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/patient-access/reason")
                         .hasAuthority(PatientPreparationPrincipal.AUTHORITY)
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/patient-access/session")
                         .hasAuthority(PatientPreparationPrincipal.AUTHORITY)
@@ -226,7 +225,7 @@ public class SecurityConfig {
     private CorsConfigurationSource patientCorsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(patientAllowedOrigins);
-        config.setAllowedMethods(List.of("GET", "POST", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of(
                 "Content-Type", "Accept", PatientCsrfTokenRepository.HEADER_NAME));
         config.setExposedHeaders(List.of(PatientCsrfTokenRepository.HEADER_NAME));

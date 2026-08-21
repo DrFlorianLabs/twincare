@@ -139,6 +139,15 @@ class ResolvePatientAccessSessionServiceTest {
         }
 
         @Override
+        public Optional<PatientAccessSessionScope> findScopeByIdentity(
+                UUID id,
+                PatientInvitationId invitationId,
+                PreparationCaseId preparationCaseId,
+                OrganizationId organizationId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public void add(PatientAccessSession session) {
             throw new UnsupportedOperationException();
         }

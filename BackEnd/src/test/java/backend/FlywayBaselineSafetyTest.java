@@ -13,6 +13,62 @@ import org.junit.jupiter.api.Test;
 class FlywayBaselineSafetyTest {
 
     @Test
+    void upgradesAnExistingV6ReasonWithoutLosingClinicalData() throws Exception {
+        String databaseName = "v6_" + UUID.randomUUID().toString().replace("-", "");
+        String url = "jdbc:h2:mem:" + databaseName + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
+
+        Flyway.configure()
+                .dataSource(url, "sa", "")
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion(MigrationVersion.fromVersion("4"))
+                .target(MigrationVersion.fromVersion("6"))
+                .load()
+                .migrate();
+
+        try (var connection = DriverManager.getConnection(url, "sa", "");
+                var statement = connection.createStatement()) {
+            statement.execute("""
+                    INSERT INTO care_organization (id, display_name, created_at)
+                    VALUES ('synthetic-v6-org', 'Synthetic V6 organization',
+                            TIMESTAMP WITH TIME ZONE '2026-08-21 10:00:00+00')
+                    """);
+            statement.execute("""
+                    INSERT INTO preparation_case (
+                        id, organization_id, patient_reference, appointment_reference,
+                        status, patient_reason, patient_reason_provenance,
+                        patient_reason_recorded_at, created_at, updated_at, version
+                    ) VALUES (
+                        RANDOM_UUID(), 'synthetic-v6-org', 'synthetic-v6-patient', 'synthetic-v6-appointment',
+                        'COLLECTING', 'Motif synthétique préexistant', 'PATIENT_DECLARED',
+                        TIMESTAMP WITH TIME ZONE '2026-08-21 10:01:00+00',
+                        TIMESTAMP WITH TIME ZONE '2026-08-21 10:00:00+00',
+                        TIMESTAMP WITH TIME ZONE '2026-08-21 10:01:00+00', 1
+                    )
+                    """);
+        }
+
+        Flyway.configure()
+                .dataSource(url, "sa", "")
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion(MigrationVersion.fromVersion("4"))
+                .load()
+                .migrate();
+
+        try (var connection = DriverManager.getConnection(url, "sa", "");
+                var statement = connection.createStatement();
+                var result = statement.executeQuery("""
+                        SELECT patient_reason
+                        FROM preparation_case
+                        WHERE organization_id = 'synthetic-v6-org'
+                        """)) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getString(1)).isEqualTo("Motif synthétique préexistant");
+        }
+    }
+
+    @Test
     void migratesFreshSchemaThroughPrototypeBaseline() throws Exception {
         String databaseName = "fresh_" + UUID.randomUUID().toString().replace("-", "");
         String url = "jdbc:h2:mem:" + databaseName + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
@@ -115,6 +171,36 @@ class FlywayBaselineSafetyTest {
                     .hasMessageContaining("UQ_PREPARATION_CASE_PATIENT_SCHEDULE");
 
             assertThat(statement.executeQuery("SELECT COUNT(*) FROM patient_invitation").next()).isTrue();
+
+            assertThatThrownBy(() -> statement.execute("""
+                    INSERT INTO preparation_case (
+                        id, organization_id, patient_reference, appointment_reference,
+                        status, patient_reason, patient_reason_provenance,
+                        patient_reason_recorded_at, created_at, updated_at, version
+                    ) VALUES (
+                        RANDOM_UUID(), 'synthetic-org', 'synthetic-patient-blank', 'synthetic-blank',
+                        'COLLECTING', '   ', 'PATIENT_DECLARED',
+                        TIMESTAMP WITH TIME ZONE '2026-08-21 10:00:00+00',
+                        TIMESTAMP WITH TIME ZONE '2026-08-21 10:00:00+00',
+                        TIMESTAMP WITH TIME ZONE '2026-08-21 10:00:00+00', 0
+                    )
+                    """))
+                    .hasMessageContaining("CK_PREPARATION_CASE_REASON_NONBLANK");
+
+            assertThatThrownBy(() -> statement.execute("""
+                    INSERT INTO preparation_case (
+                        id, organization_id, patient_reference, appointment_reference,
+                        status, patient_reason, patient_reason_provenance,
+                        patient_reason_recorded_at, created_at, updated_at, version
+                    ) VALUES (
+                        RANDOM_UUID(), 'synthetic-org', 'synthetic-patient-time', 'synthetic-time',
+                        'COLLECTING', 'Motif synthétique', 'PATIENT_DECLARED',
+                        TIMESTAMP WITH TIME ZONE '2026-08-21 09:59:59+00',
+                        TIMESTAMP WITH TIME ZONE '2026-08-21 10:00:00+00',
+                        TIMESTAMP WITH TIME ZONE '2026-08-21 10:00:00+00', 0
+                    )
+                    """))
+                    .hasMessageContaining("CK_PREPARATION_CASE_REASON_TIMELINE");
         }
     }
 }

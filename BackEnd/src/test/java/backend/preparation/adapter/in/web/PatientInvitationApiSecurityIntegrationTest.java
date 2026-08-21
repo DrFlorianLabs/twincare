@@ -3,7 +3,9 @@ package backend.preparation.adapter.in.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -318,6 +320,193 @@ class PatientInvitationApiSecurityIntegrationTest {
     }
 
     @Test
+    void patientRecordsOneReasonWithoutClientOwnedScopeOrResponseEcho() throws Exception {
+        UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-patient-reason");
+        IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
+        String sessionToken = exchangedSessionToken(invitation.token());
+        String csrfToken = csrfFor(sessionToken);
+
+        patientReason(sessionToken, csrfToken, "http://localhost:3000", """
+                {"reason":"  Fatigue synthétique depuis trois semaines  "}
+                """)
+                .andExpect(status().isNoContent())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString()).isEmpty());
+
+        Map<String, Object> persisted = jdbcTemplate.queryForMap(
+                """
+                SELECT status, patient_reason, patient_reason_provenance, patient_reason_recorded_at
+                FROM preparation_case
+                WHERE id = ?
+                """,
+                caseId);
+        assertThat(persisted)
+                .containsEntry("STATUS", "COLLECTING")
+                .containsEntry("PATIENT_REASON", "Fatigue synthétique depuis trois semaines")
+                .containsEntry("PATIENT_REASON_PROVENANCE", "PATIENT_DECLARED");
+        assertThat(persisted.get("PATIENT_REASON_RECORDED_AT")).isNotNull();
+
+        mockMvc.perform(get("/api/v1/patient-access/reason").cookie(sessionCookie(sessionToken)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void patientReasonRejectsJwtCsrfOriginInvalidBodyAndScopeInjection() throws Exception {
+        UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-patient-reason-guards");
+        IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
+        String sessionToken = exchangedSessionToken(invitation.token());
+        String csrfToken = csrfFor(sessionToken);
+        String validBody = "{\"reason\":\"Motif synthétique\"}";
+
+        patientReason(null, csrfToken, "http://localhost:3000", validBody)
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/api/v1/patient-access/reason")
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(physician))
+                        .header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .header(PatientCsrfTokenRepository.HEADER_NAME, csrfToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validBody))
+                .andExpect(status().isUnauthorized());
+        patientReason(sessionToken, null, "http://localhost:3000", validBody)
+                .andExpect(status().isForbidden());
+        patientReason(sessionToken, csrfToken, null, validBody)
+                .andExpect(status().isForbidden());
+        patientReason(sessionToken, csrfToken, "http://localhost:5173", validBody)
+                .andExpect(status().isForbidden());
+        patientReason(sessionToken, csrfToken, "http://localhost:3000", """
+                {
+                  "reason":"Motif synthétique",
+                  "preparationCaseId":"%s",
+                  "organizationId":"%s",
+                  "provenance":"HUMAN_ENTERED"
+                }
+                """.formatted(UUID.randomUUID(), ORGANIZATION_B))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                        .isEqualTo("Requête patient invalide"));
+        patientReason(sessionToken, csrfToken, "http://localhost:3000", "{\"reason\":\" \"}")
+                .andExpect(status().isBadRequest());
+        patientReason(sessionToken, csrfToken, "http://localhost:3000", "{\"reason\":\"Motif\\u0000injecté\"}")
+                .andExpect(status().isBadRequest());
+        patientReason(sessionToken, csrfToken, "http://localhost:3000", "{\"reason\":123}")
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
+        patientReason(sessionToken, csrfToken, "http://localhost:3000", "{\"reason\":true}")
+                .andExpect(status().isBadRequest());
+        patientReason(sessionToken, csrfToken, "http://localhost:3000",
+                "{\"reason\":\"%s\"}".formatted("x".repeat(4_001)))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(put("/api/v1/patient-access/reason")
+                        .cookie(sessionCookie(sessionToken))
+                        .header(PatientCsrfTokenRepository.HEADER_NAME, csrfToken)
+                        .header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("Motif synthétique"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                        .isEqualTo("Format de requête patient non pris en charge"));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT patient_reason FROM preparation_case WHERE id = ?",
+                String.class,
+                caseId)).isNull();
+
+        mockMvc.perform(options("/api/v1/patient-access/reason")
+                        .header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PUT")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+                                "Content-Type," + PatientCsrfTokenRepository.HEADER_NAME))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:3000"))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS,
+                        org.hamcrest.Matchers.containsString("PUT")))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"));
+    }
+
+    @RepeatedTest(3)
+    void identicalConcurrentReasonRetriesWriteExactlyOnce() throws Exception {
+        UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-patient-reason-retry");
+        IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
+        String sessionToken = exchangedSessionToken(invitation.token());
+        String csrfToken = csrfFor(sessionToken);
+        long initialVersion = jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> patientReasonStatusAfter(
+                    start, sessionToken, csrfToken, "Motif synthétique identique"));
+            var second = executor.submit(() -> patientReasonStatusAfter(
+                    start, sessionToken, csrfToken, "Motif synthétique identique"));
+            start.countDown();
+
+            assertThat(List.of(first.get(), second.get())).containsOnly(204);
+        }
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId))
+                .isEqualTo(initialVersion + 1);
+    }
+
+    @RepeatedTest(3)
+    void differentConcurrentReasonsAreSerializedAsCompleteReplacements() throws Exception {
+        UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-patient-reason-serialize");
+        IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
+        String sessionToken = exchangedSessionToken(invitation.token());
+        String csrfToken = csrfFor(sessionToken);
+        long initialVersion = jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId);
+        CountDownLatch start = new CountDownLatch(1);
+        String firstReason = "Premier motif synthétique complet";
+        String secondReason = "Second motif synthétique complet";
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> patientReasonStatusAfter(
+                    start, sessionToken, csrfToken, firstReason));
+            var second = executor.submit(() -> patientReasonStatusAfter(
+                    start, sessionToken, csrfToken, secondReason));
+            start.countDown();
+
+            assertThat(List.of(first.get(), second.get())).containsOnly(204);
+        }
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT patient_reason FROM preparation_case WHERE id = ?", String.class, caseId))
+                .isIn(firstReason, secondReason);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId))
+                .isEqualTo(initialVersion + 2);
+    }
+
+    @RepeatedTest(3)
+    void concurrentReasonAndProfessionalRevocationNeverWriteAfterRevocation() throws Exception {
+        UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-patient-reason-revoke");
+        IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
+        String sessionToken = exchangedSessionToken(invitation.token());
+        String csrfToken = csrfFor(sessionToken);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var reason = executor.submit(() -> patientReasonStatusAfter(
+                    start, sessionToken, csrfToken, "Motif synthétique concurrent"));
+            var revocation = executor.submit(() -> {
+                start.await();
+                return revokeInvitation(ORGANIZATION_A, caseId, invitation.id(), physician)
+                        .andReturn().getResponse().getStatus();
+            });
+            start.countDown();
+
+            assertThat(revocation.get()).isEqualTo(204);
+            assertThat(reason.get()).isIn(204, 401);
+        }
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT revoked_at IS NOT NULL FROM patient_access_session WHERE preparation_case_id = ?",
+                Boolean.class,
+                caseId)).isTrue();
+    }
+
+    @Test
     void unknownPatientRoutesRemainFailClosed() throws Exception {
         UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-session-unknown-route");
         IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
@@ -471,6 +660,7 @@ class PatientInvitationApiSecurityIntegrationTest {
         String invitationToken;
         String sessionToken;
         String csrfToken;
+        String patientReasonMarker = "PHI-SYNTHETIC-MARKER-DO-NOT-LOG";
 
         try {
             UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-log-safety");
@@ -479,6 +669,12 @@ class PatientInvitationApiSecurityIntegrationTest {
             MvcResult exchange = exchange(invitationToken).andExpect(status().isOk()).andReturn();
             sessionToken = cookieValue(exchange.getResponse().getHeader(HttpHeaders.SET_COOKIE));
             csrfToken = csrfFor(sessionToken);
+            patientReason(
+                    sessionToken,
+                    csrfToken,
+                    "http://localhost:3000",
+                    "{\"reason\":\"%s\"}".formatted(patientReasonMarker))
+                    .andExpect(status().isNoContent());
         } finally {
             rootLogger.detachAppender(appender);
             appender.stop();
@@ -488,7 +684,8 @@ class PatientInvitationApiSecurityIntegrationTest {
                 .extracting(ILoggingEvent::getFormattedMessage)
                 .noneMatch(message -> message.contains(invitationToken)
                         || message.contains(sessionToken)
-                        || message.contains(csrfToken));
+                        || message.contains(csrfToken)
+                        || message.contains(patientReasonMarker));
     }
 
     private UUID createCase(String organizationId, AppUtilisateur user, String appointmentReference) throws Exception {
@@ -559,6 +756,40 @@ class PatientInvitationApiSecurityIntegrationTest {
             request.header(HttpHeaders.ORIGIN, origin);
         }
         return mockMvc.perform(request);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions patientReason(
+            String sessionToken,
+            String csrfToken,
+            String origin,
+            String body) throws Exception {
+        var request = put("/api/v1/patient-access/reason")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body);
+        if (sessionToken != null) {
+            request.cookie(sessionCookie(sessionToken));
+        }
+        if (csrfToken != null) {
+            request.header(PatientCsrfTokenRepository.HEADER_NAME, csrfToken);
+        }
+        if (origin != null) {
+            request.header(HttpHeaders.ORIGIN, origin);
+        }
+        return mockMvc.perform(request);
+    }
+
+    private int patientReasonStatusAfter(
+            CountDownLatch start,
+            String sessionToken,
+            String csrfToken,
+            String reason) throws Exception {
+        start.await();
+        return patientReason(
+                sessionToken,
+                csrfToken,
+                "http://localhost:3000",
+                "{\"reason\":\"%s\"}".formatted(reason))
+                .andReturn().getResponse().getStatus();
     }
 
     private Cookie sessionCookie(String value) {

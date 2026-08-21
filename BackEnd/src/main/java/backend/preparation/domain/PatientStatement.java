@@ -12,6 +12,9 @@ public record PatientStatement(String text, ProvenanceType provenance, Instant r
             throw new IllegalArgumentException("Patient statement is required");
         }
         text = text.trim();
+        if (text.isEmpty() || text.indexOf('\0') >= 0) {
+            throw new IllegalArgumentException("Patient statement contains invalid characters");
+        }
         if (text.length() > MAX_LENGTH) {
             throw new IllegalArgumentException("Patient statement exceeds the allowed length");
         }

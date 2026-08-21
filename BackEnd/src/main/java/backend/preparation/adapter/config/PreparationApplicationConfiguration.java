@@ -23,6 +23,7 @@ import backend.preparation.application.service.CreatePreparationCaseService;
 import backend.preparation.application.service.EndPatientAccessSessionService;
 import backend.preparation.application.service.ExchangePatientInvitationService;
 import backend.preparation.application.service.IssuePatientInvitationService;
+import backend.preparation.application.service.RecordPatientReasonService;
 import backend.preparation.application.service.RevokePatientInvitationService;
 import backend.preparation.application.service.ResolvePatientAccessSessionService;
 
@@ -100,6 +101,8 @@ public class PreparationApplicationConfiguration {
                 accessSessions, tokenDigester, preparationClock);
         var end = new EndPatientAccessSessionService(
                 preparationCases, invitations, accessSessions, preparationClock);
-        return new TransactionalPatientSessionUseCases(resolve, end);
+        var patientReason = new RecordPatientReasonService(
+                preparationCases, invitations, accessSessions, preparationClock);
+        return new TransactionalPatientSessionUseCases(resolve, end, patientReason);
     }
 }

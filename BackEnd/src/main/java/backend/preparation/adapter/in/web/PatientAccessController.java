@@ -12,6 +12,7 @@ import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,6 +21,9 @@ import backend.preparation.application.port.in.ExchangePatientInvitationCommand;
 import backend.preparation.application.port.in.ExchangePatientInvitationUseCase;
 import backend.preparation.application.port.in.EndPatientAccessSessionCommand;
 import backend.preparation.application.port.in.EndPatientAccessSessionUseCase;
+import backend.preparation.application.port.in.RecordPatientReasonCommand;
+import backend.preparation.application.port.in.RecordPatientReasonUseCase;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/v1/patient-access")
@@ -29,16 +33,19 @@ public class PatientAccessController {
 
     private final ExchangePatientInvitationUseCase exchangeInvitation;
     private final EndPatientAccessSessionUseCase endSession;
+    private final RecordPatientReasonUseCase recordPatientReason;
     private final PatientSecurityResponses securityResponses;
     private final boolean secureCookie;
 
     public PatientAccessController(
             ExchangePatientInvitationUseCase exchangeInvitation,
             EndPatientAccessSessionUseCase endSession,
+            RecordPatientReasonUseCase recordPatientReason,
             PatientSecurityResponses securityResponses,
             @Value("${app.preparation.patient-session-cookie-secure:true}") boolean secureCookie) {
         this.exchangeInvitation = exchangeInvitation;
         this.endSession = endSession;
+        this.recordPatientReason = recordPatientReason;
         this.securityResponses = securityResponses;
         this.secureCookie = secureCookie;
     }
@@ -72,6 +79,18 @@ public class PatientAccessController {
                 .header("X-Content-Type-Options", "nosniff")
                 .header(PatientCsrfTokenRepository.HEADER_NAME, csrfToken.getToken())
                 .body(new PatientSessionResponse("ACTIVE", principal.grant().expiresAt()));
+    }
+
+    @PutMapping("/reason")
+    public ResponseEntity<Void> recordReason(
+            @AuthenticationPrincipal PatientPreparationPrincipal principal,
+            @Valid @RequestBody PatientReasonRequest request) {
+        recordPatientReason.record(new RecordPatientReasonCommand(principal.grant(), request.reason()));
+        return ResponseEntity.noContent()
+                .cacheControl(CacheControl.noStore())
+                .header("Referrer-Policy", "no-referrer")
+                .header("X-Content-Type-Options", "nosniff")
+                .build();
     }
 
     @DeleteMapping("/session")
