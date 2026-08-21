@@ -20,6 +20,9 @@ import backend.preparation.application.port.out.PatientInvitationRepository;
 import backend.preparation.application.port.out.PreparationCaseAuthorization;
 import backend.preparation.application.port.out.PreparationCaseIdGenerator;
 import backend.preparation.application.port.out.PreparationCaseRepository;
+import backend.preparation.application.port.out.PreparationReadyConfirmationRepository;
+import backend.preparation.application.port.out.PreparationTaskIdGenerator;
+import backend.preparation.application.port.out.PreparationTaskRepository;
 import backend.preparation.application.port.out.PreparationAttachmentRepository;
 import backend.preparation.application.port.out.PrivateAttachmentStorage;
 import backend.preparation.application.port.out.ProfessionalPreparationQueryRepository;
@@ -36,6 +39,7 @@ import backend.preparation.application.service.IssuePatientInvitationService;
 import backend.preparation.application.service.RecordPatientReasonService;
 import backend.preparation.application.service.PatientAttachmentScopeLock;
 import backend.preparation.application.service.ProfessionalPreparationQueryService;
+import backend.preparation.application.service.ProfessionalPreparationCommandService;
 import backend.preparation.application.service.PutPatientAttachmentCoordinator;
 import backend.preparation.application.service.RevokePatientInvitationService;
 import backend.preparation.application.service.ResolvePatientAccessSessionService;
@@ -162,5 +166,24 @@ public class PreparationApplicationConfiguration {
                 repository,
                 new PreparationReadinessPolicy());
         return new TransactionalProfessionalPreparationQueries(service, service);
+    }
+
+    @Bean
+    TransactionalProfessionalPreparationCommands professionalPreparationCommands(
+            ProfessionalPreparationAuthorization authorization,
+            PreparationCaseRepository preparationCases,
+            PreparationTaskRepository tasks,
+            PreparationReadyConfirmationRepository confirmations,
+            PreparationTaskIdGenerator taskIdGenerator,
+            Clock preparationClock) {
+        var service = new ProfessionalPreparationCommandService(
+                authorization,
+                preparationCases,
+                tasks,
+                confirmations,
+                taskIdGenerator,
+                new PreparationReadinessPolicy(),
+                preparationClock);
+        return new TransactionalProfessionalPreparationCommands(service, service, service);
     }
 }

@@ -6,6 +6,7 @@ import java.time.Instant;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -25,6 +26,19 @@ interface SpringDataPreparationCaseRepository extends JpaRepository<PreparationC
     Optional<PreparationCaseJpaEntity> findByIdAndOrganizationIdForUpdate(
             @Param("id") UUID id,
             @Param("organizationId") String organizationId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update PreparationCaseJpaEntity preparationCase
+            set preparationCase.version = preparationCase.version + 1
+            where preparationCase.id = :id
+              and preparationCase.organizationId = :organizationId
+              and preparationCase.version = :expectedVersion
+            """)
+    int forceIncrementVersion(
+            @Param("id") UUID id,
+            @Param("organizationId") String organizationId,
+            @Param("expectedVersion") long expectedVersion);
 
     boolean existsByOrganizationIdAndAppointmentReference(String organizationId, String appointmentReference);
 

@@ -10,8 +10,8 @@ Before a consultation, the primary-care professional needs to understand the
 available preparation quickly without reconstructing the case or asking a
 model to make an implicit clinical decision. The current vertical slice already
 contains the case, the exact patient-declared reason and one optional
-attachment. It does not yet contain preparation tasks or a persisted readiness
-confirmation.
+attachment. TC-006a establishes the read-only policy and view; task and
+confirmation mutations are specified separately by ADR 0007.
 
 The professional view contains health-related data. A general organization
 administrator must not receive clinical access merely because they can manage
@@ -32,14 +32,14 @@ The states are:
   confirmation;
 - `NOT_APPLICABLE`: the case is terminal.
 
-TC-006a has no persisted professional confirmation and therefore cannot emit
-`READY`. If stored case status claims `READY_FOR_CONSULTATION` without that
-evidence, assessment fails closed. TC-006b will add the evidence, actor and
-rule version in the same transaction as the status transition.
+The policy emits `READY` only when a persisted professional confirmation agrees
+with `READY_FOR_CONSULTATION`. If stored case status claims readiness without
+that evidence, assessment fails closed. ADR 0007 defines the evidence, actor,
+reviewed revision and atomic status transition added by TC-006b.
 
-TC-006a also has no persisted task aggregate. A stored `NEEDS_ACTION` state
-without an open task therefore fails closed instead of being mislabeled
-`REVIEWABLE`. TC-006b will make task count and case status change atomically.
+A stored `NEEDS_ACTION` state without an open task fails closed instead of
+being mislabeled `REVIEWABLE`. ADR 0007 defines the task aggregate and the
+atomic task-count/case-status changes added by TC-006b.
 
 The typed blockers are `PATIENT_REASON_MISSING` and
 `OPEN_PREPARATION_TASKS`. Missing optional attachments are not blockers. The
@@ -63,8 +63,8 @@ Clinical capabilities are separate from general staff creation access:
 
 - clinicians and active medical assistants may view preparations;
 - organization administrators have no clinical view by default;
-- later task management, attachment download and ready confirmation use
-  separate capabilities;
+- task management, attachment download and ready confirmation use separate
+  capabilities;
 - ready confirmation is reserved for clinicians.
 
 Both the HTTP boundary and application service enforce access. The application
@@ -76,8 +76,8 @@ organization and case identifiers together.
 - The professional can see the preparation state without an LLM, provider or
   materialized summary.
 - The contract is explainable and regression-testable.
-- TC-006b will add human tasks and persisted confirmation, then feed their
-  counts/evidence into the same policy.
+- TC-006b feeds human-task counts and persisted confirmation evidence into this
+  policy as specified by ADR 0007.
 - TC-006c will add professional byte download behind the dedicated download
   capability and a separate security review.
 - TC-006d will consume the stable API in the professional frontend.
@@ -88,4 +88,5 @@ organization and case identifiers together.
 - generated summary, OCR, classification or LLM use;
 - automatic task generation;
 - declaring a document missing from attachment absence;
-- document download, mutations, closure or durable audit events.
+- document download, task-label editing or reassignment, closure or durable
+  audit events.

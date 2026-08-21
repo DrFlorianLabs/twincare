@@ -3,6 +3,7 @@ package backend.preparation.application.port.in;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.List;
 
 import backend.preparation.domain.AppointmentReference;
 import backend.preparation.domain.PatientReference;
@@ -20,7 +21,10 @@ public record ProfessionalPreparationViewResult(
         PreparationReadinessAssessment readiness,
         Optional<PatientStatement> patientReason,
         Optional<ProfessionalAttachmentResult> attachment,
+        List<PreparationTaskResult> tasks,
+        Optional<ProfessionalReadyConfirmationResult> readyConfirmation,
         int openTaskCount,
+        long revision,
         Instant createdAt,
         Instant updatedAt) {
 
@@ -33,8 +37,10 @@ public record ProfessionalPreparationViewResult(
         Objects.requireNonNull(readiness, "Preparation readiness is required");
         Objects.requireNonNull(patientReason, "Patient reason container is required");
         Objects.requireNonNull(attachment, "Attachment container is required");
-        if (openTaskCount < 0) {
-            throw new IllegalArgumentException("Open task count cannot be negative");
+        tasks = List.copyOf(Objects.requireNonNull(tasks, "Preparation task list is required"));
+        Objects.requireNonNull(readyConfirmation, "Readiness confirmation container is required");
+        if (openTaskCount < 0 || revision < 0) {
+            throw new IllegalArgumentException("Preparation case evidence is invalid");
         }
         Objects.requireNonNull(createdAt, "Preparation case creation timestamp is required");
         Objects.requireNonNull(updatedAt, "Preparation case update timestamp is required");

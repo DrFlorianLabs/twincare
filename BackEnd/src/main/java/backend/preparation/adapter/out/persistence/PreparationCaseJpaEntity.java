@@ -138,6 +138,10 @@ class PreparationCaseJpaEntity {
         return updatedAt;
     }
 
+    Long version() {
+        return version;
+    }
+
     void updateFrom(PreparationCaseJpaEntity source) {
         if (!id.equals(source.id) || !organizationId.equals(source.organizationId)) {
             throw new IllegalArgumentException("Preparation case identity cannot change");

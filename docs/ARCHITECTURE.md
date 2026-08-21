@@ -178,6 +178,30 @@ may view preparation data; organization administrators have no clinical access
 by default. Authorization happens before each query and every case lookup is
 scoped by both organization and case identifiers.
 
+## 4.7 Human task and confirmation boundary
+
+Human preparation tasks and clinician confirmation are defined in
+[`adr/0007-human-preparation-tasks-and-ready-confirmation.md`](adr/0007-human-preparation-tasks-and-ready-confirmation.md).
+A task is an explicit human action, never a clinical inference from prose or an
+absent optional document. It belongs to exactly one organization and case and
+is assigned to an active clinician or medical assistant in that organization.
+
+All task and confirmation mutations serialize on the owning case. The case
+revision is the optimistic review token exposed to the professional: reason,
+task and attachment changes advance it, while no-op retries do not. A clinician
+confirmation must provide the revision that was actually reviewed and stores
+that revision with its server-derived actor, time and readiness-rule version.
+This prevents a stale professional screen from confirming unseen changes.
+The read path independently verifies that the current revision is exactly the
+confirmed revision plus the confirmation transition, that the reviewed reason
+timestamp still matches and that no task is open. Its multi-query detailed view
+uses repeatable-read isolation to avoid mixing two concurrent states.
+
+Task management is available to active clinicians and medical assistants;
+ready confirmation is clinician-only. Organization administrators have neither
+capability by default. The read model returns task labels only in the detailed
+view, never in the bounded worklist or ordinary logs.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:

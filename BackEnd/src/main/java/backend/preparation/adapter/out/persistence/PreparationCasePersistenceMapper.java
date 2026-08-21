@@ -42,6 +42,7 @@ final class PreparationCasePersistenceMapper {
                 entity.createdAt(),
                 entity.status(),
                 patientReason,
-                entity.updatedAt());
+                entity.updatedAt(),
+                entity.version());
     }
 }

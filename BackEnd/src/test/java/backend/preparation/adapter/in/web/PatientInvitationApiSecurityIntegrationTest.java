@@ -520,6 +520,8 @@ class PatientInvitationApiSecurityIntegrationTest {
         IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
         String sessionToken = exchangedSessionToken(invitation.token());
         String csrfToken = csrfFor(sessionToken);
+        long initialCaseRevision = jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId);
 
         patientAttachmentGet(sessionToken)
                 .andExpect(status().isNotFound())
@@ -550,6 +552,9 @@ class PatientInvitationApiSecurityIntegrationTest {
                 .containsEntry("VERSION", 0L)
                 .containsEntry("PROVENANCE", "PATIENT_UPLOADED");
         assertThat(firstRow.get("SHA256_DIGEST").toString()).hasSize(64);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId))
+                .isEqualTo(initialCaseRevision + 1);
 
         patientAttachmentGet(sessionToken)
                 .andExpect(status().isOk())
@@ -567,6 +572,9 @@ class PatientInvitationApiSecurityIntegrationTest {
         assertThat(identicalRow)
                 .containsEntry("STORAGE_KEY", firstRow.get("STORAGE_KEY"))
                 .containsEntry("VERSION", 0L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId))
+                .isEqualTo(initialCaseRevision + 1);
 
         byte[] replacementBytes = validPng();
         patientAttachmentPut(
@@ -581,6 +589,9 @@ class PatientInvitationApiSecurityIntegrationTest {
                 "SELECT storage_key, version FROM preparation_attachment WHERE preparation_case_id = ?", caseId);
         assertThat(replacedRow.get("STORAGE_KEY")).isNotEqualTo(firstRow.get("STORAGE_KEY"));
         assertThat(replacedRow).containsEntry("VERSION", 1L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId))
+                .isEqualTo(initialCaseRevision + 2);
 
         patientAttachmentDelete(sessionToken, csrfToken, "http://localhost:3000")
                 .andExpect(status().isNoContent());
@@ -590,6 +601,9 @@ class PatientInvitationApiSecurityIntegrationTest {
                 "SELECT COUNT(*) FROM preparation_attachment WHERE preparation_case_id = ?",
                 Integer.class,
                 caseId)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId))
+                .isEqualTo(initialCaseRevision + 3);
         patientAttachmentGet(sessionToken).andExpect(status().isNotFound());
     }
 
@@ -1081,6 +1095,8 @@ class PatientInvitationApiSecurityIntegrationTest {
         jdbcTemplate.queryForList("SELECT storage_key FROM preparation_attachment", UUID.class)
                 .forEach(storageKey -> attachmentStorage.deleteFinal(new AttachmentStorageKey(storageKey)));
         jdbcTemplate.update("DELETE FROM preparation_attachment");
+        jdbcTemplate.update("DELETE FROM preparation_ready_confirmation");
+        jdbcTemplate.update("DELETE FROM preparation_task");
         jdbcTemplate.update("DELETE FROM patient_access_session");
         jdbcTemplate.update("DELETE FROM patient_invitation");
         jdbcTemplate.update("DELETE FROM preparation_case");

@@ -28,6 +28,7 @@ import backend.preparation.application.port.out.ProfessionalPreparationListPageS
 import backend.preparation.application.port.out.ProfessionalPreparationListSnapshot;
 import backend.preparation.application.port.out.ProfessionalPreparationQueryRepository;
 import backend.preparation.application.port.out.ProfessionalPreparationViewSnapshot;
+import backend.preparation.application.port.out.ProfessionalReadyConfirmationSnapshot;
 import backend.preparation.domain.AppointmentReference;
 import backend.preparation.domain.AttachmentMediaType;
 import backend.preparation.domain.OrganizationId;
@@ -68,7 +69,11 @@ class ProfessionalPreparationQueryServiceTest {
                 Optional.of(NOW.plusSeconds(3600)),
                 PreparationCaseStatus.COLLECTING,
                 true,
+                Optional.of(NOW),
+                0,
+                Optional.empty(),
                 false,
+                0,
                 NOW);
         when(repository.findPage(ORGANIZATION_ID, 0, 20))
                 .thenReturn(new ProfessionalPreparationListPageSnapshot(List.of(snapshot), 0, 20, 1, 1));
@@ -97,6 +102,10 @@ class ProfessionalPreparationQueryServiceTest {
                 PreparationCaseStatus.COLLECTING,
                 Optional.of(reason),
                 Optional.empty(),
+                List.of(),
+                0,
+                Optional.empty(),
+                0,
                 NOW.minusSeconds(60),
                 NOW);
         when(repository.findView(ORGANIZATION_ID, CASE_ID)).thenReturn(Optional.of(snapshot));
@@ -127,6 +136,10 @@ class ProfessionalPreparationQueryServiceTest {
                 PreparationCaseStatus.READY_FOR_CONSULTATION,
                 Optional.of(PatientStatement.declaredByPatient("Synthetic exact reason", NOW)),
                 Optional.empty(),
+                List.of(),
+                0,
+                Optional.empty(),
+                0,
                 NOW.minusSeconds(60),
                 NOW);
         when(repository.findView(ORGANIZATION_ID, CASE_ID)).thenReturn(Optional.of(snapshot));
@@ -147,12 +160,81 @@ class ProfessionalPreparationQueryServiceTest {
                 PreparationCaseStatus.NEEDS_ACTION,
                 Optional.of(PatientStatement.declaredByPatient("Synthetic exact reason", NOW)),
                 Optional.empty(),
+                List.of(),
+                0,
+                Optional.empty(),
+                0,
                 NOW.minusSeconds(60),
                 NOW);
         when(repository.findView(ORGANIZATION_ID, CASE_ID)).thenReturn(Optional.of(snapshot));
 
         assertThatThrownBy(() -> service.get(
                 new GetProfessionalPreparationViewCommand(ORGANIZATION_ID, CASE_ID)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("inconsistent");
+    }
+
+    @Test
+    void staleReadyConfirmationRevisionFailsClosed() {
+        var reason = PatientStatement.declaredByPatient("Synthetic exact reason", NOW);
+        var staleConfirmation = new ProfessionalReadyConfirmationSnapshot(
+                42,
+                NOW.plusSeconds(1),
+                PreparationReadinessPolicy.CURRENT_RULE_SET_ID,
+                PreparationReadinessPolicy.CURRENT_RULE_SET_VERSION,
+                0,
+                NOW,
+                0);
+        var snapshot = new ProfessionalPreparationViewSnapshot(
+                CASE_ID,
+                new PatientReference("synthetic-patient"),
+                Optional.empty(),
+                Optional.of(NOW.plusSeconds(3600)),
+                PreparationCaseStatus.READY_FOR_CONSULTATION,
+                Optional.of(reason),
+                Optional.empty(),
+                List.of(),
+                0,
+                Optional.of(staleConfirmation),
+                2,
+                NOW.minusSeconds(60),
+                NOW.plusSeconds(1));
+        when(repository.findView(ORGANIZATION_ID, CASE_ID)).thenReturn(Optional.of(snapshot));
+
+        assertThatThrownBy(() -> service.get(
+                new GetProfessionalPreparationViewCommand(ORGANIZATION_ID, CASE_ID)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("inconsistent");
+    }
+
+    @Test
+    void confirmationForAnotherReasonVersionFailsClosedInTheWorklist() {
+        var mismatchedConfirmation = new ProfessionalReadyConfirmationSnapshot(
+                42,
+                NOW.plusSeconds(1),
+                PreparationReadinessPolicy.CURRENT_RULE_SET_ID,
+                PreparationReadinessPolicy.CURRENT_RULE_SET_VERSION,
+                0,
+                NOW.minusSeconds(1),
+                0);
+        var snapshot = new ProfessionalPreparationListSnapshot(
+                CASE_ID,
+                new PatientReference("synthetic-patient"),
+                Optional.empty(),
+                Optional.of(NOW.plusSeconds(3600)),
+                PreparationCaseStatus.READY_FOR_CONSULTATION,
+                true,
+                Optional.of(NOW),
+                0,
+                Optional.of(mismatchedConfirmation),
+                false,
+                1,
+                NOW.plusSeconds(1));
+        when(repository.findPage(ORGANIZATION_ID, 0, 20))
+                .thenReturn(new ProfessionalPreparationListPageSnapshot(List.of(snapshot), 0, 20, 1, 1));
+
+        assertThatThrownBy(() -> service.list(
+                new ListProfessionalPreparationsCommand(ORGANIZATION_ID, 0, 20)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("inconsistent");
     }

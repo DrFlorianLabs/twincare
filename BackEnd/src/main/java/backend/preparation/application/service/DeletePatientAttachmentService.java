@@ -28,6 +28,7 @@ public final class DeletePatientAttachmentService implements DeletePatientAttach
         lockedScope.attachment().ifPresent(attachment -> {
             storageTransaction.deleteAfterCommit(attachment.storageKey());
             attachments.delete(attachment);
+            scopeLock.touchVisibleContent(lockedScope);
         });
     }
 }

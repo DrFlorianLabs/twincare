@@ -12,6 +12,7 @@ public record ProfessionalPreparationListItemResponse(
         PreparationReadinessResponse readiness,
         int openTaskCount,
         boolean attachmentPresent,
+        long revision,
         Instant updatedAt) {
 
     @Override

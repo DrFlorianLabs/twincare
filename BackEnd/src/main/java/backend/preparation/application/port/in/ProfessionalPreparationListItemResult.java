@@ -19,6 +19,7 @@ public record ProfessionalPreparationListItemResult(
         PreparationReadinessAssessment readiness,
         int openTaskCount,
         boolean attachmentPresent,
+        long revision,
         Instant updatedAt) {
 
     public ProfessionalPreparationListItemResult {
@@ -28,8 +29,8 @@ public record ProfessionalPreparationListItemResult(
         Objects.requireNonNull(scheduledAt, "Scheduled timestamp container is required");
         Objects.requireNonNull(caseStatus, "Preparation case status is required");
         Objects.requireNonNull(readiness, "Preparation readiness is required");
-        if (openTaskCount < 0) {
-            throw new IllegalArgumentException("Open task count cannot be negative");
+        if (openTaskCount < 0 || revision < 0) {
+            throw new IllegalArgumentException("Preparation case evidence is invalid");
         }
         Objects.requireNonNull(updatedAt, "Preparation case update timestamp is required");
     }

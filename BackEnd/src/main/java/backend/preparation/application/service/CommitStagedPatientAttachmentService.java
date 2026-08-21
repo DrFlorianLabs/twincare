@@ -60,6 +60,7 @@ public final class CommitStagedPatientAttachmentService implements CommitStagedP
                     staged.digest(),
                     persistedAt);
             attachments.add(created);
+            scopeLock.touchVisibleContent(lockedScope);
             return result(created, true, true);
         }
 
@@ -73,6 +74,7 @@ public final class CommitStagedPatientAttachmentService implements CommitStagedP
                 staged.digest(),
                 persistedAt);
         attachments.update(existing);
+        scopeLock.touchVisibleContent(lockedScope);
         return result(existing, false, true);
     }
 

@@ -196,6 +196,36 @@ class ProfessionalPreparationApiSecurityIntegrationTest {
     }
 
     @Test
+    void persistedReadyEvidenceMustMatchTheCurrentCaseRevisionAndReason() throws Exception {
+        UUID caseId = insertCase(
+                ORGANIZATION_A,
+                "READY_FOR_CONSULTATION",
+                "Synthetic exact reason",
+                NOW.plusSeconds(3600));
+        jdbcTemplate.update("UPDATE preparation_case SET version = 1 WHERE id = ?", caseId);
+        insertReadyConfirmation(caseId, 0, NOW);
+
+        mockMvc.perform(get(viewEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(physician)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.readiness.state").value("READY"));
+
+        jdbcTemplate.update("UPDATE preparation_case SET version = 2 WHERE id = ?", caseId);
+        mockMvc.perform(get(viewEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(physician)))
+                .andExpect(status().isInternalServerError());
+
+        jdbcTemplate.update(
+                "UPDATE preparation_case SET version = 1, patient_reason_recorded_at = ?, updated_at = ? WHERE id = ?",
+                NOW.plusSeconds(1),
+                NOW.plusSeconds(1),
+                caseId);
+        mockMvc.perform(get(viewEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(physician)))
+                .andExpect(status().isInternalServerError());
+    }
+
+    @Test
     void professionalViewDoesNotLogClinicalTextOrAttachmentFilename() throws Exception {
         String marker = "synthetic-professional-view-marker-" + UUID.randomUUID();
         UUID caseId = insertCase(ORGANIZATION_A, "COLLECTING", marker, NOW.plusSeconds(3600));
@@ -267,8 +297,30 @@ class ProfessionalPreparationApiSecurityIntegrationTest {
                 0L);
     }
 
+    private void insertReadyConfirmation(UUID caseId, long reviewedRevision, Instant reviewedReasonAt) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO preparation_ready_confirmation (
+                    preparation_case_id, organization_id, confirmed_by_user_id, confirmed_at,
+                    rule_set_id, rule_set_version, reviewed_case_revision,
+                    reviewed_reason_recorded_at, open_task_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                caseId,
+                ORGANIZATION_A,
+                physician.getId(),
+                NOW.plusSeconds(2),
+                "CORE_PREPARATION",
+                1,
+                reviewedRevision,
+                reviewedReasonAt,
+                0);
+    }
+
     private void clearPreparationData() {
         jdbcTemplate.update("DELETE FROM preparation_attachment");
+        jdbcTemplate.update("DELETE FROM preparation_ready_confirmation");
+        jdbcTemplate.update("DELETE FROM preparation_task");
         jdbcTemplate.update("DELETE FROM patient_access_session");
         jdbcTemplate.update("DELETE FROM patient_invitation");
         jdbcTemplate.update("DELETE FROM preparation_case");

@@ -87,9 +87,10 @@ public class ProfessionalPreparationController {
                 result.appointmentReference().map(reference -> reference.value()).orElse(null),
                 result.scheduledAt().orElse(null),
                 result.caseStatus().name(),
-                toReadiness(result.readiness()),
+                toReadinessResponse(result.readiness()),
                 result.openTaskCount(),
                 result.attachmentPresent(),
+                result.revision(),
                 result.updatedAt());
     }
 
@@ -104,16 +105,32 @@ public class ProfessionalPreparationController {
         var attachment = result.attachment()
                 .map(this::toAttachment)
                 .orElseGet(() -> new ProfessionalAttachmentResponse(false, null, null, null, null, null));
+        var tasks = result.tasks().stream()
+                .map(ProfessionalPreparationCommandController::toTask)
+                .toList();
+        var readyConfirmation = result.readyConfirmation()
+                .map(value -> new ProfessionalReadyConfirmationResponse(
+                        true,
+                        value.confirmedByUserId(),
+                        value.confirmedAt(),
+                        value.ruleSetId(),
+                        value.ruleSetVersion(),
+                        value.reviewedCaseRevision()))
+                .orElseGet(() -> new ProfessionalReadyConfirmationResponse(
+                        false, null, null, null, null, null));
         return new ProfessionalPreparationViewResponse(
                 result.caseId().value(),
                 result.patientReference().value(),
                 result.appointmentReference().map(reference -> reference.value()).orElse(null),
                 result.scheduledAt().orElse(null),
                 result.caseStatus().name(),
-                toReadiness(result.readiness()),
+                toReadinessResponse(result.readiness()),
                 reason,
                 attachment,
+                tasks,
+                readyConfirmation,
                 result.openTaskCount(),
+                result.revision(),
                 result.createdAt(),
                 result.updatedAt());
     }
@@ -128,7 +145,7 @@ public class ProfessionalPreparationController {
                 result.updatedAt());
     }
 
-    private PreparationReadinessResponse toReadiness(PreparationReadinessAssessment readiness) {
+    static PreparationReadinessResponse toReadinessResponse(PreparationReadinessAssessment readiness) {
         return new PreparationReadinessResponse(
                 readiness.ruleSetId(),
                 readiness.ruleSetVersion(),

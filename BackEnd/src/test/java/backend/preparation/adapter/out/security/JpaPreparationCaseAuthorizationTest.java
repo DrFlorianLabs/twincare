@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Collection;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 
 import backend.entity.AppUtilisateur;
 import backend.entity.Role;
+import backend.dao.AppUtilisateurRepository;
 import backend.exception.UnauthorizedActionException;
 import backend.preparation.application.port.out.PreparationCaseCapability;
 import backend.preparation.domain.OrganizationId;
@@ -30,6 +32,7 @@ class JpaPreparationCaseAuthorizationTest {
     private SecurityHelperService securityHelperService;
     private OrganizationMembershipJpaRepository membershipRepository;
     private AppUtilisateur currentUser;
+    private AppUtilisateurRepository userRepository;
     private JpaPreparationCaseAuthorization authorization;
 
     @BeforeEach
@@ -37,9 +40,11 @@ class JpaPreparationCaseAuthorizationTest {
         securityHelperService = mock(SecurityHelperService.class);
         membershipRepository = mock(OrganizationMembershipJpaRepository.class);
         currentUser = mock(AppUtilisateur.class);
+        userRepository = mock(AppUtilisateurRepository.class);
         when(currentUser.getId()).thenReturn(USER_ID);
         when(securityHelperService.getCurrentUser()).thenReturn(currentUser);
-        authorization = new JpaPreparationCaseAuthorization(securityHelperService, membershipRepository);
+        authorization = new JpaPreparationCaseAuthorization(
+                securityHelperService, membershipRepository, userRepository);
     }
 
     @Test
@@ -111,5 +116,33 @@ class JpaPreparationCaseAuthorizationTest {
                 OrganizationMembershipRole.CLINICIAN,
                 OrganizationMembershipRole.MEDICAL_ASSISTANT);
         assertThat(roles.getValue()).doesNotContain(OrganizationMembershipRole.ORGANIZATION_ADMIN);
+    }
+
+    @Test
+    void assignmentRequiresAnActiveClinicalStaffIdentityInTheSameOrganization() {
+        AppUtilisateur assignee = mock(AppUtilisateur.class);
+        when(assignee.getRole()).thenReturn(Role.ASSISTANT_MEDICAL);
+        when(userRepository.findById(84L)).thenReturn(Optional.of(assignee));
+        when(membershipRepository.existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
+                eq(ORGANIZATION_ID.value()), eq(84L), anyCollection()))
+                .thenReturn(true);
+
+        authorization.requireAssignableStaff(ORGANIZATION_ID, 84L);
+
+        verify(membershipRepository).existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
+                eq(ORGANIZATION_ID.value()), eq(84L), anyCollection());
+    }
+
+    @Test
+    void assignmentRejectsAPlatformPatientEvenWithCorruptClinicalMembership() {
+        AppUtilisateur assignee = mock(AppUtilisateur.class);
+        when(assignee.getRole()).thenReturn(Role.PATIENT);
+        when(userRepository.findById(84L)).thenReturn(Optional.of(assignee));
+
+        assertThatThrownBy(() -> authorization.requireAssignableStaff(ORGANIZATION_ID, 84L))
+                .isInstanceOf(UnauthorizedActionException.class);
+        verify(membershipRepository, never())
+                .existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
+                        eq(ORGANIZATION_ID.value()), eq(84L), anyCollection());
     }
 }
