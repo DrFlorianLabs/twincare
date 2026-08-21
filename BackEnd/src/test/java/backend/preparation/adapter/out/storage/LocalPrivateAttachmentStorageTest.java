@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import backend.preparation.application.InvalidPatientAttachmentException;
 import backend.preparation.application.PatientAttachmentStorageUnavailableException;
+import backend.preparation.application.ProfessionalAttachmentStorageUnavailableException;
 import backend.preparation.application.port.in.PatientAttachmentUpload;
 import backend.preparation.domain.AttachmentMediaType;
 
@@ -113,6 +116,100 @@ class LocalPrivateAttachmentStorageTest {
         assertThatThrownBy(() -> storage.stage(upload(
                 "document.pdf", "application/pdf", content, content.length)))
                 .isInstanceOf(PatientAttachmentStorageUnavailableException.class);
+    }
+
+    @Test
+    void verifiedOpenHandleStreamsThePinnedVersionAfterConcurrentDeletionMove() throws Exception {
+        LocalPrivateAttachmentStorage storage = storage(1_000_000);
+        byte[] bytes = pdf("pinned-synthetic-version");
+        var staged = storage.stage(upload(
+                "result.pdf", "application/pdf", bytes, bytes.length));
+        storage.promote(staged);
+
+        var content = storage.openVerified(
+                staged.storageKey(), staged.sizeBytes(), staged.digest());
+        var deletion = storage.stageDeletion(staged.storageKey());
+        var output = new ByteArrayOutputStream();
+
+        content.transferTo(output);
+
+        assertThat(output.toByteArray()).isEqualTo(bytes);
+        assertThat(deletion.existed()).isTrue();
+        storage.finalizeStagedDeletion(deletion);
+    }
+
+    @Test
+    void downloadFailsClosedBeforeStreamingWhenStoredBytesDoNotMatchMetadata() throws Exception {
+        LocalPrivateAttachmentStorage storage = storage(1_000_000);
+        byte[] bytes = pdf("original-synthetic-version");
+        var staged = storage.stage(upload(
+                "result.pdf", "application/pdf", bytes, bytes.length));
+        storage.promote(staged);
+        Files.write(
+                tempDir.resolve(staged.storageKey().value().toString()),
+                pdf("corrupt-synthetic-version"));
+
+        assertThatThrownBy(() -> storage.openVerified(
+                staged.storageKey(), staged.sizeBytes(), staged.digest()))
+                .isInstanceOf(ProfessionalAttachmentStorageUnavailableException.class);
+    }
+
+    @Test
+    void downloadNeverFollowsASymlinkReplacingTheOpaqueFinalObject() throws Exception {
+        LocalPrivateAttachmentStorage storage = storage(1_000_000);
+        byte[] bytes = pdf("original-synthetic-version");
+        var staged = storage.stage(upload(
+                "result.pdf", "application/pdf", bytes, bytes.length));
+        storage.promote(staged);
+        Path finalPath = tempDir.resolve(staged.storageKey().value().toString());
+        Files.delete(finalPath);
+        Path other = tempDir.resolve("synthetic-other-file");
+        Files.write(other, bytes);
+        Files.createSymbolicLink(finalPath, other);
+
+        assertThatThrownBy(() -> storage.openVerified(
+                staged.storageKey(), staged.sizeBytes(), staged.digest()))
+                .isInstanceOf(ProfessionalAttachmentStorageUnavailableException.class);
+    }
+
+    @Test
+    void clientWriteFailureStillClosesThePinnedContent() throws Exception {
+        LocalPrivateAttachmentStorage storage = storage(1_000_000);
+        byte[] bytes = pdf("synthetic-client-abort");
+        var staged = storage.stage(upload(
+                "result.pdf", "application/pdf", bytes, bytes.length));
+        storage.promote(staged);
+        var content = storage.openVerified(
+                staged.storageKey(), staged.sizeBytes(), staged.digest());
+
+        assertThatThrownBy(() -> content.transferTo(new java.io.OutputStream() {
+            @Override
+            public void write(int value) throws IOException {
+                throw new IOException("synthetic client abort");
+            }
+
+            @Override
+            public void write(byte[] values, int offset, int length) throws IOException {
+                throw new IOException("synthetic client abort");
+            }
+        })).isInstanceOf(IOException.class);
+        content.close();
+    }
+
+    @Test
+    void storageReadFailureIsNotMisclassifiedAsAClientDisconnect() throws Exception {
+        LocalPrivateAttachmentStorage storage = storage(1_000_000);
+        byte[] bytes = pdf("synthetic-storage-read-failure");
+        var staged = storage.stage(upload(
+                "result.pdf", "application/pdf", bytes, bytes.length));
+        storage.promote(staged);
+        var content = storage.openVerified(
+                staged.storageKey(), staged.sizeBytes(), staged.digest());
+        content.close();
+
+        assertThatThrownBy(() -> content.transferTo(new java.io.ByteArrayOutputStream()))
+                .isInstanceOf(ProfessionalAttachmentStorageUnavailableException.class)
+                .hasCauseInstanceOf(java.nio.channels.ClosedChannelException.class);
     }
 
     private LocalPrivateAttachmentStorage storage(long maxSize) {

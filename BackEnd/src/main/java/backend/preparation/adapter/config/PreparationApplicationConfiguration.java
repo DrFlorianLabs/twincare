@@ -6,6 +6,8 @@ import java.time.Duration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import backend.preparation.application.port.in.CreatePreparationCaseUseCase;
 import backend.preparation.application.port.in.PutPatientAttachmentUseCase;
@@ -25,6 +27,7 @@ import backend.preparation.application.port.out.PreparationTaskIdGenerator;
 import backend.preparation.application.port.out.PreparationTaskRepository;
 import backend.preparation.application.port.out.PreparationAttachmentRepository;
 import backend.preparation.application.port.out.PrivateAttachmentStorage;
+import backend.preparation.application.port.out.PrivateAttachmentContentReader;
 import backend.preparation.application.port.out.ProfessionalPreparationQueryRepository;
 import backend.preparation.application.port.out.ProfessionalPreparationAuthorization;
 import backend.preparation.application.port.out.SecureTokenDigester;
@@ -32,6 +35,7 @@ import backend.preparation.application.port.out.SecureTokenGenerator;
 import backend.preparation.application.service.CreatePreparationCaseService;
 import backend.preparation.application.service.CommitStagedPatientAttachmentService;
 import backend.preparation.application.service.DeletePatientAttachmentService;
+import backend.preparation.application.service.DownloadProfessionalAttachmentService;
 import backend.preparation.application.service.EndPatientAccessSessionService;
 import backend.preparation.application.service.ExchangePatientInvitationService;
 import backend.preparation.application.service.GetPatientAttachmentService;
@@ -185,5 +189,21 @@ public class PreparationApplicationConfiguration {
                 new PreparationReadinessPolicy(),
                 preparationClock);
         return new TransactionalProfessionalPreparationCommands(service, service, service);
+    }
+
+    @Bean
+    TransactionalProfessionalAttachmentDownload professionalAttachmentDownload(
+            ProfessionalPreparationAuthorization authorization,
+            PreparationCaseRepository preparationCases,
+            PreparationAttachmentRepository attachments,
+            PrivateAttachmentContentReader contentReader,
+            PlatformTransactionManager transactionManager) {
+        return new TransactionalProfessionalAttachmentDownload(
+                new DownloadProfessionalAttachmentService(
+                        authorization,
+                        preparationCases,
+                        attachments,
+                        contentReader),
+                new TransactionTemplate(transactionManager));
     }
 }

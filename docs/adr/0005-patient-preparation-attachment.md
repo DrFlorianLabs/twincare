@@ -39,10 +39,10 @@ server-side scope checks inside their transaction and share the lock order
 `case -> invitation -> session -> attachment`. Responses are `no-store` and
 expose neither domain IDs, storage keys nor digests.
 
-Patient byte download is deliberately absent. An authenticated and
-organization-authorized professional download may be designed with the
-professional read model; it must force `Content-Disposition: attachment` and
-must never rely on an opaque storage key as authorization.
+Patient byte download is deliberately absent. The later authenticated,
+organization-authorized professional download is defined separately in
+[`0008-professional-attachment-download.md`](0008-professional-attachment-download.md)
+and never treats an opaque storage key as authorization.
 
 ### File validation and minimisation
 
@@ -96,7 +96,8 @@ metadata.
 - Upload, replacement, retries, deletion, rollback and interrupted-process
   recovery have explicit deterministic behavior.
 - Storage remains replaceable by a later HDS-compatible adapter.
-- This slice adds no professional download, OCR, classification, clinical
-  interpretation, questionnaire, readiness rule or audit-event store.
+- This patient-contribution slice itself added no professional download, OCR,
+  classification, clinical interpretation, questionnaire, readiness rule or
+  audit-event store.
 - Success should later be measured by useful-document availability before the
   visit, retrieval time avoided, rejected/failed uploads and patient effort.

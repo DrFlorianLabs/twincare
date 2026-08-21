@@ -7,6 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -30,6 +33,9 @@ import backend.entity.Role;
 import backend.entity.Sexe;
 import backend.security.JwtService;
 import backend.security.UtilisateurSecurite;
+import backend.preparation.adapter.out.storage.LocalPrivateAttachmentStorage;
+import backend.preparation.application.port.in.PatientAttachmentUpload;
+import backend.preparation.application.port.out.StagedAttachment;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
@@ -51,6 +57,8 @@ class ProfessionalPreparationApiSecurityIntegrationTest {
     private AppUtilisateurRepository utilisateurRepository;
     @Autowired
     private JdbcTemplate jdbcTemplate;
+    @Autowired
+    private LocalPrivateAttachmentStorage attachmentStorage;
 
     private AppUtilisateur physician;
 
@@ -250,6 +258,87 @@ class ProfessionalPreparationApiSecurityIntegrationTest {
                 .noneMatch(message -> message.contains(marker));
     }
 
+    @Test
+    void clinicianDownloadsVerifiedBytesWithDefensiveHeadersOutsideTheDatabaseTransaction() throws Exception {
+        UUID caseId = insertCase(ORGANIZATION_A, "COLLECTING", "Synthetic exact reason", NOW.plusSeconds(3600));
+        byte[] bytes = ("%PDF-1.7\nsynthetic-download-content\n%%EOF")
+                .getBytes(StandardCharsets.UTF_8);
+        StagedAttachment staged = storeAttachment("résultat synthétique.pdf", bytes);
+        insertAttachment(ORGANIZATION_A, caseId, staged);
+
+        mockMvc.perform(get(downloadEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(physician)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(header().string("Pragma", "no-cache"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(header().string("Content-Type", "application/pdf"))
+                .andExpect(header().longValue("Content-Length", bytes.length))
+                .andExpect(header().string(
+                        "Content-Disposition",
+                        org.hamcrest.Matchers.allOf(
+                                org.hamcrest.Matchers.containsString("attachment"),
+                                org.hamcrest.Matchers.containsString("filename*="))))
+                .andExpect(content().bytes(bytes));
+
+        mockMvc.perform(get(downloadEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(physician))
+                        .header("Range", "bytes=0-3"))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("Content-Range"))
+                .andExpect(content().bytes(bytes));
+    }
+
+    @Test
+    void assistantCanDownloadButAdministratorAndWrongTenantFailClosed() throws Exception {
+        UUID caseId = insertCase(ORGANIZATION_A, "COLLECTING", "Synthetic exact reason", NOW.plusSeconds(3600));
+        byte[] bytes = ("%PDF-1.7\nsynthetic-assistant-content\n%%EOF")
+                .getBytes(StandardCharsets.UTF_8);
+        insertAttachment(ORGANIZATION_A, caseId, storeAttachment("result.pdf", bytes));
+        AppUtilisateur assistant = createUser("assistant-download@synthetic.invalid", Role.ASSISTANT_MEDICAL);
+        addMembership(ORGANIZATION_A, assistant, "MEDICAL_ASSISTANT", true);
+        AppUtilisateur administrator = createUser("admin-download@synthetic.invalid", Role.ADMIN);
+        addMembership(ORGANIZATION_A, administrator, "ORGANIZATION_ADMIN", true);
+
+        mockMvc.perform(get(downloadEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(assistant)))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(bytes));
+
+        mockMvc.perform(get(downloadEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(administrator)))
+                .andExpect(status().isForbidden())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
+
+        addMembership(ORGANIZATION_B, physician, "CLINICIAN", true);
+        mockMvc.perform(get(downloadEndpoint(ORGANIZATION_B, caseId))
+                        .header("Authorization", bearerToken(physician)))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
+    }
+
+    @Test
+    void missingMetadataIs404AndMissingStoredBytesAre503BeforeAnyBodyIsStreamed() throws Exception {
+        UUID withoutAttachment = insertCase(
+                ORGANIZATION_A, "COLLECTING", "Synthetic exact reason", NOW.plusSeconds(3600));
+        mockMvc.perform(get(downloadEndpoint(ORGANIZATION_A, withoutAttachment))
+                        .header("Authorization", bearerToken(physician)))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
+        mockMvc.perform(get(downloadEndpoint(ORGANIZATION_A, withoutAttachment)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
+
+        UUID missingBytes = insertCase(
+                ORGANIZATION_A, "COLLECTING", "Synthetic other reason", NOW.plusSeconds(7200));
+        insertAttachment(ORGANIZATION_A, missingBytes, "synthetic-missing.pdf");
+        mockMvc.perform(get(downloadEndpoint(ORGANIZATION_A, missingBytes))
+                        .header("Authorization", bearerToken(physician)))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(content().string("Document de préparation temporairement indisponible"));
+    }
+
     private UUID insertCase(String organizationId, String status, String reason, Instant scheduledAt) {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update(
@@ -297,6 +386,55 @@ class ProfessionalPreparationApiSecurityIntegrationTest {
                 0L);
     }
 
+    private void insertAttachment(String organizationId, UUID caseId, StagedAttachment staged) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO preparation_attachment (
+                    id, organization_id, preparation_case_id, storage_key, display_filename,
+                    media_type, size_bytes, sha256_digest, provenance, uploaded_at, updated_at, version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                UUID.randomUUID(),
+                organizationId,
+                caseId,
+                staged.storageKey().value(),
+                staged.displayFilename(),
+                staged.mediaType().name(),
+                staged.sizeBytes(),
+                staged.digest().value(),
+                "PATIENT_UPLOADED",
+                NOW,
+                NOW,
+                0L);
+    }
+
+    private StagedAttachment storeAttachment(String filename, byte[] bytes) {
+        PatientAttachmentUpload upload = new PatientAttachmentUpload() {
+            @Override
+            public String originalFilename() {
+                return filename;
+            }
+
+            @Override
+            public String declaredContentType() {
+                return "application/pdf";
+            }
+
+            @Override
+            public long declaredSizeBytes() {
+                return bytes.length;
+            }
+
+            @Override
+            public InputStream openStream() {
+                return new ByteArrayInputStream(bytes);
+            }
+        };
+        StagedAttachment staged = attachmentStorage.stage(upload);
+        attachmentStorage.promote(staged);
+        return staged;
+    }
+
     private void insertReadyConfirmation(UUID caseId, long reviewedRevision, Instant reviewedReasonAt) {
         jdbcTemplate.update(
                 """
@@ -334,6 +472,10 @@ class ProfessionalPreparationApiSecurityIntegrationTest {
 
     private String viewEndpoint(String organizationId, UUID caseId) {
         return listEndpoint(organizationId) + "/" + caseId + "/preparation-view";
+    }
+
+    private String downloadEndpoint(String organizationId, UUID caseId) {
+        return listEndpoint(organizationId) + "/" + caseId + "/attachment";
     }
 
     private AppUtilisateur createUser(String email, Role role) {

@@ -117,6 +117,15 @@ ready status without matching confirmation evidence fails closed. The detailed
 view uses one repeatable-read database snapshot and rechecks the current reason
 timestamp, revision and open-task count before emitting `READY`.
 
+`GET .../{caseId}/attachment` lets an active clinician or medical assistant
+download the current optional document. Application authorization is checked
+before tenant-scoped case and attachment locks. Storage size and SHA-256 are
+verified on one pinned, no-follow file handle before the transaction ends; that
+same handle is then streamed outside the transaction and always closed. The
+response is `attachment`, `no-store` and `nosniff`, and never exposes a storage
+key or digest. Missing metadata returns 404, while missing/corrupted bytes fail
+closed with a generic 503.
+
 ## Database safety
 
 Flyway migration V3 is a destructive historical prototype migration and is kept
