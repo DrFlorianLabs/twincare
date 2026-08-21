@@ -2,6 +2,7 @@ package backend.preparation.application.service;
 
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
+import java.util.Optional;
 
 import backend.preparation.application.InvalidPatientAttachmentException;
 import backend.preparation.application.port.in.CommitStagedPatientAttachmentCommand;
@@ -10,9 +11,14 @@ import backend.preparation.application.port.in.PutPatientAttachmentResult;
 import backend.preparation.application.port.out.AttachmentIdGenerator;
 import backend.preparation.application.port.out.AttachmentStorageTransaction;
 import backend.preparation.application.port.out.PreparationAttachmentRepository;
+import backend.preparation.application.port.out.PreparationAuditEventStore;
 import backend.preparation.application.port.out.StagedAttachment;
 import backend.preparation.domain.AttachmentStorageKey;
 import backend.preparation.domain.PreparationAttachment;
+import backend.preparation.domain.PreparationAuditEvent;
+import backend.preparation.domain.PreparationAuditEventType;
+import backend.preparation.domain.PreparationAuditSubject;
+import backend.preparation.domain.PreparationAuditSubjectType;
 
 public final class CommitStagedPatientAttachmentService implements CommitStagedPatientAttachmentUseCase {
 
@@ -20,16 +26,19 @@ public final class CommitStagedPatientAttachmentService implements CommitStagedP
     private final PreparationAttachmentRepository attachments;
     private final AttachmentIdGenerator idGenerator;
     private final AttachmentStorageTransaction storageTransaction;
+    private final PreparationAuditEventStore auditEvents;
 
     public CommitStagedPatientAttachmentService(
             PatientAttachmentScopeLock scopeLock,
             PreparationAttachmentRepository attachments,
             AttachmentIdGenerator idGenerator,
-            AttachmentStorageTransaction storageTransaction) {
+            AttachmentStorageTransaction storageTransaction,
+            PreparationAuditEventStore auditEvents) {
         this.scopeLock = Objects.requireNonNull(scopeLock);
         this.attachments = Objects.requireNonNull(attachments);
         this.idGenerator = Objects.requireNonNull(idGenerator);
         this.storageTransaction = Objects.requireNonNull(storageTransaction);
+        this.auditEvents = Objects.requireNonNull(auditEvents);
     }
 
     @Override
@@ -60,7 +69,8 @@ public final class CommitStagedPatientAttachmentService implements CommitStagedP
                     staged.digest(),
                     persistedAt);
             attachments.add(created);
-            scopeLock.touchVisibleContent(lockedScope);
+            long persistedRevision = scopeLock.touchVisibleContent(lockedScope);
+            appendAudit(created, PreparationAuditEventType.ATTACHMENT_CREATED, persistedAt, persistedRevision);
             return result(created, true, true);
         }
 
@@ -74,8 +84,25 @@ public final class CommitStagedPatientAttachmentService implements CommitStagedP
                 staged.digest(),
                 persistedAt);
         attachments.update(existing);
-        scopeLock.touchVisibleContent(lockedScope);
+        long persistedRevision = scopeLock.touchVisibleContent(lockedScope);
+        appendAudit(existing, PreparationAuditEventType.ATTACHMENT_REPLACED, persistedAt, persistedRevision);
         return result(existing, false, true);
+    }
+
+    private void appendAudit(
+            PreparationAttachment attachment,
+            PreparationAuditEventType type,
+            java.time.Instant occurredAt,
+            long persistedRevision) {
+        auditEvents.append(PreparationAuditEvent.patient(
+                attachment.organizationId(),
+                attachment.preparationCaseId(),
+                type,
+                occurredAt,
+                persistedRevision,
+                Optional.of(new PreparationAuditSubject(
+                        PreparationAuditSubjectType.ATTACHMENT,
+                        attachment.id().value()))));
     }
 
     private PutPatientAttachmentResult result(

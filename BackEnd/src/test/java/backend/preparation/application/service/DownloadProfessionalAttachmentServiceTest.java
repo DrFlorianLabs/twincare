@@ -8,7 +8,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -59,7 +61,14 @@ class DownloadProfessionalAttachmentServiceTest {
         attachments = mock(PreparationAttachmentRepository.class);
         contentReader = mock(PrivateAttachmentContentReader.class);
         service = new DownloadProfessionalAttachmentService(
-                authorization, preparationCases, attachments, contentReader);
+                authorization,
+                preparationCases,
+                attachments,
+                contentReader,
+                event -> { },
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        when(authorization.requireAccess(
+                ORGANIZATION_ID, PreparationCaseCapability.DOWNLOAD_ATTACHMENT)).thenReturn(42L);
     }
 
     @Test

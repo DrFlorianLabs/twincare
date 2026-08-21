@@ -11,6 +11,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import backend.preparation.application.port.in.CreatePreparationCaseUseCase;
 import backend.preparation.application.port.in.GetProfessionalContextUseCase;
+import backend.preparation.application.port.in.ListPreparationAuditEventsUseCase;
 import backend.preparation.application.port.in.PutPatientAttachmentUseCase;
 import backend.preparation.application.port.in.ResolvePatientAccessSessionUseCase;
 import backend.preparation.application.port.out.AttachmentIdGenerator;
@@ -20,6 +21,8 @@ import backend.preparation.application.port.out.PatientAccessSessionRepository;
 import backend.preparation.application.port.out.PatientInvitationExchangeGuard;
 import backend.preparation.application.port.out.PatientInvitationIdGenerator;
 import backend.preparation.application.port.out.PatientInvitationRepository;
+import backend.preparation.application.port.out.PreparationAuditEventReader;
+import backend.preparation.application.port.out.PreparationAuditEventStore;
 import backend.preparation.application.port.out.PreparationCaseAuthorization;
 import backend.preparation.application.port.out.PreparationCaseIdGenerator;
 import backend.preparation.application.port.out.PreparationCaseRepository;
@@ -43,6 +46,7 @@ import backend.preparation.application.service.ExchangePatientInvitationService;
 import backend.preparation.application.service.GetPatientAttachmentService;
 import backend.preparation.application.service.GetProfessionalContextService;
 import backend.preparation.application.service.IssuePatientInvitationService;
+import backend.preparation.application.service.ListPreparationAuditEventsService;
 import backend.preparation.application.service.RecordPatientReasonService;
 import backend.preparation.application.service.PatientAttachmentScopeLock;
 import backend.preparation.application.service.ProfessionalPreparationQueryService;
@@ -65,11 +69,13 @@ public class PreparationApplicationConfiguration {
             PreparationCaseAuthorization authorization,
             PreparationCaseRepository repository,
             PreparationCaseIdGenerator idGenerator,
+            PreparationAuditEventStore auditEvents,
             Clock preparationClock) {
         CreatePreparationCaseService service = new CreatePreparationCaseService(
                 authorization,
                 repository,
                 idGenerator,
+                auditEvents,
                 preparationClock);
         return new TransactionalCreatePreparationCaseUseCase(service);
     }
@@ -85,6 +91,7 @@ public class PreparationApplicationConfiguration {
             SecureTokenGenerator tokenGenerator,
             SecureTokenDigester tokenDigester,
             PatientInvitationExchangeGuard exchangeGuard,
+            PreparationAuditEventStore auditEvents,
             Clock preparationClock,
             @Value("${app.preparation.invitation-ttl:PT72H}") Duration invitationTtl) {
         var issue = new IssuePatientInvitationService(
@@ -95,6 +102,7 @@ public class PreparationApplicationConfiguration {
                 invitationIdGenerator,
                 tokenGenerator,
                 tokenDigester,
+                auditEvents,
                 preparationClock,
                 invitationTtl);
         var revoke = new RevokePatientInvitationService(
@@ -102,6 +110,7 @@ public class PreparationApplicationConfiguration {
                 preparationCases,
                 invitations,
                 accessSessions,
+                auditEvents,
                 preparationClock);
         var exchange = new ExchangePatientInvitationService(
                 invitations,
@@ -111,6 +120,7 @@ public class PreparationApplicationConfiguration {
                 tokenGenerator,
                 tokenDigester,
                 exchangeGuard,
+                auditEvents,
                 preparationClock);
         return new TransactionalPatientInvitationUseCases(issue, revoke, exchange);
     }
@@ -121,13 +131,14 @@ public class PreparationApplicationConfiguration {
             PatientInvitationRepository invitations,
             PatientAccessSessionRepository accessSessions,
             SecureTokenDigester tokenDigester,
+            PreparationAuditEventStore auditEvents,
             Clock preparationClock) {
         ResolvePatientAccessSessionUseCase resolve = new ResolvePatientAccessSessionService(
                 accessSessions, tokenDigester, preparationClock);
         var end = new EndPatientAccessSessionService(
-                preparationCases, invitations, accessSessions, preparationClock);
+                preparationCases, invitations, accessSessions, auditEvents, preparationClock);
         var patientReason = new RecordPatientReasonService(
-                preparationCases, invitations, accessSessions, preparationClock);
+                preparationCases, invitations, accessSessions, auditEvents, preparationClock);
         return new TransactionalPatientSessionUseCases(resolve, end, patientReason);
     }
 
@@ -139,6 +150,7 @@ public class PreparationApplicationConfiguration {
             PreparationAttachmentRepository attachments,
             AttachmentIdGenerator attachmentIdGenerator,
             AttachmentStorageTransaction attachmentStorageTransaction,
+            PreparationAuditEventStore auditEvents,
             Clock preparationClock) {
         var scopeLock = new PatientAttachmentScopeLock(
                 preparationCases,
@@ -150,10 +162,11 @@ public class PreparationApplicationConfiguration {
                 scopeLock,
                 attachments,
                 attachmentIdGenerator,
-                attachmentStorageTransaction);
+                attachmentStorageTransaction,
+                auditEvents);
         var get = new GetPatientAttachmentService(scopeLock);
         var delete = new DeletePatientAttachmentService(
-                scopeLock, attachments, attachmentStorageTransaction);
+                scopeLock, attachments, attachmentStorageTransaction, auditEvents);
         return new TransactionalPatientAttachmentUseCases(commit, get, delete);
     }
 
@@ -187,6 +200,7 @@ public class PreparationApplicationConfiguration {
             PreparationTaskRepository tasks,
             PreparationReadyConfirmationRepository confirmations,
             PreparationTaskIdGenerator taskIdGenerator,
+            PreparationAuditEventStore auditEvents,
             Clock preparationClock) {
         var service = new ProfessionalPreparationCommandService(
                 authorization,
@@ -194,6 +208,7 @@ public class PreparationApplicationConfiguration {
                 tasks,
                 confirmations,
                 taskIdGenerator,
+                auditEvents,
                 new PreparationReadinessPolicy(),
                 preparationClock);
         return new TransactionalProfessionalPreparationCommands(service, service, service);
@@ -205,13 +220,26 @@ public class PreparationApplicationConfiguration {
             PreparationCaseRepository preparationCases,
             PreparationAttachmentRepository attachments,
             PrivateAttachmentContentReader contentReader,
+            PreparationAuditEventStore auditEvents,
+            Clock preparationClock,
             PlatformTransactionManager transactionManager) {
         return new TransactionalProfessionalAttachmentDownload(
                 new DownloadProfessionalAttachmentService(
                         authorization,
                         preparationCases,
                         attachments,
-                        contentReader),
+                        contentReader,
+                        auditEvents,
+                        preparationClock),
                 new TransactionTemplate(transactionManager));
+    }
+
+    @Bean
+    ListPreparationAuditEventsUseCase preparationAuditEventQueries(
+            ProfessionalPreparationAuthorization authorization,
+            PreparationCaseRepository preparationCases,
+            PreparationAuditEventReader auditEvents) {
+        return new TransactionalPreparationAuditEventQueries(
+                new ListPreparationAuditEventsService(authorization, preparationCases, auditEvents));
     }
 }

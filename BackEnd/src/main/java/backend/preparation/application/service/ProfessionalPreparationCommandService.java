@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
+import java.util.Optional;
 
 import backend.preparation.application.PreparationCaseNotFoundException;
 import backend.preparation.application.PreparationTaskNotFoundException;
@@ -18,12 +19,17 @@ import backend.preparation.application.port.in.CreatePreparationTaskUseCase;
 import backend.preparation.application.port.in.PreparationReadyConfirmationResult;
 import backend.preparation.application.port.in.PreparationTaskResult;
 import backend.preparation.application.port.out.PreparationCaseCapability;
+import backend.preparation.application.port.out.PreparationAuditEventStore;
 import backend.preparation.application.port.out.PreparationCaseRepository;
 import backend.preparation.application.port.out.PreparationReadyConfirmationRepository;
 import backend.preparation.application.port.out.PreparationTaskIdGenerator;
 import backend.preparation.application.port.out.PreparationTaskRepository;
 import backend.preparation.application.port.out.ProfessionalPreparationAuthorization;
 import backend.preparation.domain.PreparationCase;
+import backend.preparation.domain.PreparationAuditEvent;
+import backend.preparation.domain.PreparationAuditEventType;
+import backend.preparation.domain.PreparationAuditSubject;
+import backend.preparation.domain.PreparationAuditSubjectType;
 import backend.preparation.domain.PreparationCaseStatus;
 import backend.preparation.domain.PreparationReadyConfirmation;
 import backend.preparation.domain.PreparationReadinessPolicy;
@@ -42,6 +48,7 @@ public final class ProfessionalPreparationCommandService implements
     private final PreparationTaskRepository tasks;
     private final PreparationReadyConfirmationRepository confirmations;
     private final PreparationTaskIdGenerator taskIdGenerator;
+    private final PreparationAuditEventStore auditEvents;
     private final PreparationReadinessPolicy readinessPolicy;
     private final Clock clock;
 
@@ -51,6 +58,7 @@ public final class ProfessionalPreparationCommandService implements
             PreparationTaskRepository tasks,
             PreparationReadyConfirmationRepository confirmations,
             PreparationTaskIdGenerator taskIdGenerator,
+            PreparationAuditEventStore auditEvents,
             PreparationReadinessPolicy readinessPolicy,
             Clock clock) {
         this.authorization = Objects.requireNonNull(authorization);
@@ -58,6 +66,7 @@ public final class ProfessionalPreparationCommandService implements
         this.tasks = Objects.requireNonNull(tasks);
         this.confirmations = Objects.requireNonNull(confirmations);
         this.taskIdGenerator = Objects.requireNonNull(taskIdGenerator);
+        this.auditEvents = Objects.requireNonNull(auditEvents);
         this.readinessPolicy = Objects.requireNonNull(readinessPolicy);
         this.clock = Objects.requireNonNull(clock);
     }
@@ -105,7 +114,17 @@ public final class ProfessionalPreparationCommandService implements
         } else {
             preparationCase.markNeedsAction(now);
         }
-        preparationCases.update(preparationCase);
+        long persistedRevision = preparationCases.update(preparationCase);
+        auditEvents.append(PreparationAuditEvent.staff(
+                preparationCase.organizationId(),
+                preparationCase.id(),
+                PreparationAuditEventType.TASK_CREATED,
+                actorUserId,
+                now,
+                persistedRevision,
+                Optional.of(new PreparationAuditSubject(
+                        PreparationAuditSubjectType.PREPARATION_TASK,
+                        task.id().value()))));
         return new CreatePreparationTaskResult(toResult(task), true);
     }
 
@@ -141,7 +160,20 @@ public final class ProfessionalPreparationCommandService implements
         } else {
             preparationCase.touchVisibleContent(now);
         }
-        preparationCases.update(preparationCase);
+        long persistedRevision = preparationCases.update(preparationCase);
+        PreparationAuditEventType eventType = command.targetStatus() == backend.preparation.domain.PreparationTaskStatus.COMPLETED
+                ? PreparationAuditEventType.TASK_COMPLETED
+                : PreparationAuditEventType.TASK_CANCELLED;
+        auditEvents.append(PreparationAuditEvent.staff(
+                preparationCase.organizationId(),
+                preparationCase.id(),
+                eventType,
+                actorUserId,
+                now,
+                persistedRevision,
+                Optional.of(new PreparationAuditSubject(
+                        PreparationAuditSubjectType.PREPARATION_TASK,
+                        task.id().value()))));
         return toResult(task);
     }
 
@@ -201,8 +233,16 @@ public final class ProfessionalPreparationCommandService implements
             preparationCase.markReadyForReview(now);
         }
         preparationCase.markReadyForConsultation(now);
-        preparationCases.update(preparationCase);
+        long persistedRevision = preparationCases.update(preparationCase);
         confirmations.add(confirmation);
+        auditEvents.append(PreparationAuditEvent.staff(
+                preparationCase.organizationId(),
+                preparationCase.id(),
+                PreparationAuditEventType.READY_CONFIRMED,
+                actorUserId,
+                now,
+                persistedRevision,
+                Optional.empty()));
         return confirmationResult(preparationCase, confirmation, 0);
     }
 

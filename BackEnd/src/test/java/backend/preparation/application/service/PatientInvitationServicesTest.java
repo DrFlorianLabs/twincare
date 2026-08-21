@@ -32,6 +32,8 @@ import backend.preparation.domain.PatientInvitation;
 import backend.preparation.domain.PatientInvitationId;
 import backend.preparation.domain.PatientInvitationStatus;
 import backend.preparation.domain.PatientReference;
+import backend.preparation.domain.PreparationAuditEvent;
+import backend.preparation.domain.PreparationAuditEventType;
 import backend.preparation.domain.PreparationCase;
 import backend.preparation.domain.PreparationCaseId;
 import backend.preparation.domain.PreparationCaseStatus;
@@ -72,6 +74,7 @@ class PatientInvitationServicesTest {
                 () -> INVITATION_ID,
                 () -> INVITATION_TOKEN,
                 DIGESTER,
+                event -> { },
                 fixedClock(),
                 Duration.ofHours(72));
 
@@ -103,6 +106,7 @@ class PatientInvitationServicesTest {
                     return INVITATION_TOKEN;
                 },
                 DIGESTER,
+                event -> { },
                 fixedClock(),
                 Duration.ofHours(1));
 
@@ -128,6 +132,7 @@ class PatientInvitationServicesTest {
                 DIGESTER,
                 occurredAt -> {
                 },
+                event -> { },
                 fixedClock());
 
         var result = service.exchange(new ExchangePatientInvitationCommand(INVITATION_TOKEN.value()));
@@ -157,6 +162,7 @@ class PatientInvitationServicesTest {
                 DIGESTER,
                 occurredAt -> {
                 },
+                event -> { },
                 fixedClock());
 
         assertThatThrownBy(() -> service.exchange(new ExchangePatientInvitationCommand(INVITATION_TOKEN.value())))
@@ -177,6 +183,7 @@ class PatientInvitationServicesTest {
                 DIGESTER,
                 occurredAt -> {
                 },
+                event -> { },
                 fixedClock());
 
         assertThatThrownBy(() -> service.exchange(new ExchangePatientInvitationCommand("malformed")))
@@ -192,11 +199,13 @@ class PatientInvitationServicesTest {
         consumed.consume(NOW.minusSeconds(30));
         invitations.current = consumed;
         RecordingAccessSessionRepository sessions = new RecordingAccessSessionRepository();
+        List<PreparationAuditEvent> auditEvents = new ArrayList<>();
         RevokePatientInvitationService service = new RevokePatientInvitationService(
                 organizationId -> 42L,
                 new RecordingPreparationCaseRepository(newCase()),
                 invitations,
                 sessions,
+                auditEvents::add,
                 fixedClock());
         var command = new RevokePatientInvitationCommand(ORGANIZATION_ID, CASE_ID, INVITATION_ID);
 
@@ -206,6 +215,11 @@ class PatientInvitationServicesTest {
         assertThat(invitations.current.status()).isEqualTo(PatientInvitationStatus.REVOKED);
         assertThat(invitations.current.consumedAt()).contains(NOW.minusSeconds(30));
         assertThat(sessions.revokedInvitationIds).containsExactly(INVITATION_ID, INVITATION_ID);
+        assertThat(auditEvents)
+                .extracting(PreparationAuditEvent::type)
+                .containsExactly(
+                        PreparationAuditEventType.INVITATION_REVOKED,
+                        PreparationAuditEventType.PATIENT_ACCESS_REVOKED);
     }
 
     private PreparationCase newCase() {
@@ -259,8 +273,9 @@ class PatientInvitationServicesTest {
         }
 
         @Override
-        public void update(PreparationCase preparationCase) {
+        public long update(PreparationCase preparationCase) {
             current = preparationCase;
+            return preparationCase.revision() + 1;
         }
 
         @Override
@@ -374,8 +389,10 @@ class PatientInvitationServicesTest {
         }
 
         @Override
-        public void revokeByInvitationId(PatientInvitationId invitationId, Instant occurredAt) {
+        public boolean revokeByInvitationId(PatientInvitationId invitationId, Instant occurredAt) {
+            boolean changed = !revokedInvitationIds.contains(invitationId);
             revokedInvitationIds.add(invitationId);
+            return changed;
         }
     }
 }

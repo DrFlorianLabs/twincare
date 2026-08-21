@@ -167,7 +167,7 @@ class ResolvePatientAccessSessionServiceTest {
         }
 
         @Override
-        public void revokeByInvitationId(PatientInvitationId invitationId, Instant occurredAt) {
+        public boolean revokeByInvitationId(PatientInvitationId invitationId, Instant occurredAt) {
             throw new UnsupportedOperationException();
         }
     }

@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 import backend.preparation.application.PatientInvitationConflictException;
 import backend.preparation.application.PreparationCaseNotFoundException;
@@ -13,6 +14,7 @@ import backend.preparation.application.port.in.IssuePatientInvitationUseCase;
 import backend.preparation.application.port.out.PatientAccessSessionRepository;
 import backend.preparation.application.port.out.PatientInvitationIdGenerator;
 import backend.preparation.application.port.out.PatientInvitationRepository;
+import backend.preparation.application.port.out.PreparationAuditEventStore;
 import backend.preparation.application.port.out.PreparationCaseAuthorization;
 import backend.preparation.application.port.out.PreparationCaseRepository;
 import backend.preparation.application.port.out.SecureTokenDigester;
@@ -21,6 +23,10 @@ import backend.preparation.domain.PatientInvitation;
 import backend.preparation.domain.PreparationCase;
 import backend.preparation.domain.PreparationCaseStatus;
 import backend.preparation.domain.SecureToken;
+import backend.preparation.domain.PreparationAuditEvent;
+import backend.preparation.domain.PreparationAuditEventType;
+import backend.preparation.domain.PreparationAuditSubject;
+import backend.preparation.domain.PreparationAuditSubjectType;
 
 public final class IssuePatientInvitationService implements IssuePatientInvitationUseCase {
 
@@ -33,6 +39,7 @@ public final class IssuePatientInvitationService implements IssuePatientInvitati
     private final PatientInvitationIdGenerator invitationIdGenerator;
     private final SecureTokenGenerator tokenGenerator;
     private final SecureTokenDigester tokenDigester;
+    private final PreparationAuditEventStore auditEvents;
     private final Clock clock;
     private final Duration invitationTtl;
 
@@ -44,6 +51,7 @@ public final class IssuePatientInvitationService implements IssuePatientInvitati
             PatientInvitationIdGenerator invitationIdGenerator,
             SecureTokenGenerator tokenGenerator,
             SecureTokenDigester tokenDigester,
+            PreparationAuditEventStore auditEvents,
             Clock clock,
             Duration invitationTtl) {
         this.authorization = Objects.requireNonNull(authorization);
@@ -53,6 +61,7 @@ public final class IssuePatientInvitationService implements IssuePatientInvitati
         this.invitationIdGenerator = Objects.requireNonNull(invitationIdGenerator);
         this.tokenGenerator = Objects.requireNonNull(tokenGenerator);
         this.tokenDigester = Objects.requireNonNull(tokenDigester);
+        this.auditEvents = Objects.requireNonNull(auditEvents);
         this.clock = Objects.requireNonNull(clock);
         this.invitationTtl = validateTtl(invitationTtl);
     }
@@ -78,7 +87,27 @@ public final class IssuePatientInvitationService implements IssuePatientInvitati
                 .ifPresent(previous -> {
                     previous.revoke(now);
                     invitations.update(previous);
-                    accessSessions.revokeByInvitationId(previous.id(), now);
+                    boolean accessRevoked = accessSessions.revokeByInvitationId(previous.id(), now);
+                    auditEvents.append(PreparationAuditEvent.staff(
+                            preparationCase.organizationId(),
+                            preparationCase.id(),
+                            PreparationAuditEventType.INVITATION_REVOKED,
+                            actorId,
+                            now,
+                            preparationCase.revision(),
+                            Optional.of(new PreparationAuditSubject(
+                                    PreparationAuditSubjectType.INVITATION,
+                                    previous.id().value()))));
+                    if (accessRevoked) {
+                        auditEvents.append(PreparationAuditEvent.staff(
+                                preparationCase.organizationId(),
+                                preparationCase.id(),
+                                PreparationAuditEventType.PATIENT_ACCESS_REVOKED,
+                                actorId,
+                                now,
+                                preparationCase.revision(),
+                                Optional.empty()));
+                    }
                 });
 
         SecureToken token = tokenGenerator.nextToken();
@@ -91,6 +120,16 @@ public final class IssuePatientInvitationService implements IssuePatientInvitati
                 now,
                 expiresAt);
         invitations.add(invitation);
+        auditEvents.append(PreparationAuditEvent.staff(
+                preparationCase.organizationId(),
+                preparationCase.id(),
+                PreparationAuditEventType.INVITATION_ISSUED,
+                actorId,
+                now,
+                preparationCase.revision(),
+                Optional.of(new PreparationAuditSubject(
+                        PreparationAuditSubjectType.INVITATION,
+                        invitation.id().value()))));
         return new IssuePatientInvitationResult(invitation.id(), token, invitation.expiresAt());
     }
 

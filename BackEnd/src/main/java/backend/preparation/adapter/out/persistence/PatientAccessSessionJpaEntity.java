@@ -96,9 +96,11 @@ class PatientAccessSessionJpaEntity {
         revokedAt = session.revokedAt().orElse(null);
     }
 
-    void revoke(Instant occurredAt) {
+    boolean revoke(Instant occurredAt) {
         if (revokedAt == null) {
             revokedAt = occurredAt;
+            return true;
         }
+        return false;
     }
 }

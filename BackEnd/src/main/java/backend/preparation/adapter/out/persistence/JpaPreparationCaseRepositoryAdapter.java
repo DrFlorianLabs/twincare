@@ -45,7 +45,7 @@ public class JpaPreparationCaseRepositoryAdapter implements PreparationCaseRepos
     }
 
     @Override
-    public void update(PreparationCase preparationCase) {
+    public long update(PreparationCase preparationCase) {
         PreparationCaseJpaEntity managed = repository
                 .findByIdAndOrganizationId(
                         preparationCase.id().value(),
@@ -61,6 +61,7 @@ public class JpaPreparationCaseRepositoryAdapter implements PreparationCaseRepos
                         previousVersion) != 1) {
             throw new IllegalStateException("Preparation case revision could not be advanced");
         }
+        return previousVersion + 1;
     }
 
     @Override

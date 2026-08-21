@@ -191,6 +191,8 @@ class PatientInvitationApiSecurityIntegrationTest {
                 invitation.id())).isOne();
         assertThat(countStoredValue(invitation.token())).isZero();
         assertThat(countStoredValue(sessionToken)).isZero();
+        assertThat(auditTypes(caseId)).containsExactly(
+                "PREPARATION_CREATED", "INVITATION_ISSUED", "PATIENT_ACCESS_STARTED");
 
         exchange(invitation.token())
                 .andExpect(status().isUnauthorized())
@@ -353,6 +355,11 @@ class PatientInvitationApiSecurityIntegrationTest {
                 .containsEntry("PATIENT_REASON", "Fatigue synthétique depuis trois semaines")
                 .containsEntry("PATIENT_REASON_PROVENANCE", "PATIENT_DECLARED");
         assertThat(persisted.get("PATIENT_REASON_RECORDED_AT")).isNotNull();
+        assertThat(auditTypes(caseId)).containsExactly(
+                "PREPARATION_CREATED",
+                "INVITATION_ISSUED",
+                "PATIENT_ACCESS_STARTED",
+                "PATIENT_REASON_RECORDED");
 
         mockMvc.perform(get("/api/v1/patient-access/reason").cookie(sessionCookie(sessionToken)))
                 .andExpect(status().isForbidden());
@@ -456,6 +463,13 @@ class PatientInvitationApiSecurityIntegrationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId))
                 .isEqualTo(initialVersion + 1);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM preparation_audit_event
+                WHERE preparation_case_id = ? AND event_type = 'PATIENT_REASON_RECORDED'
+                """,
+                Integer.class,
+                caseId)).isOne();
     }
 
     @RepeatedTest(3)
@@ -604,6 +618,13 @@ class PatientInvitationApiSecurityIntegrationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId))
                 .isEqualTo(initialCaseRevision + 3);
+        assertThat(auditTypes(caseId)).containsExactly(
+                "PREPARATION_CREATED",
+                "INVITATION_ISSUED",
+                "PATIENT_ACCESS_STARTED",
+                "ATTACHMENT_CREATED",
+                "ATTACHMENT_REPLACED",
+                "ATTACHMENT_DELETED");
         patientAttachmentGet(sessionToken).andExpect(status().isNotFound());
     }
 
@@ -789,6 +810,10 @@ class PatientInvitationApiSecurityIntegrationTest {
                 "SELECT COUNT(*) FROM patient_access_session WHERE preparation_case_id = ?",
                 Integer.class,
                 cancelledCase)).isZero();
+        assertThat(auditTypes(expiredCase)).containsExactly(
+                "PREPARATION_CREATED", "INVITATION_ISSUED", "INVITATION_EXPIRED");
+        assertThat(auditTypes(cancelledCase)).containsExactly(
+                "PREPARATION_CREATED", "INVITATION_ISSUED", "INVITATION_REVOKED");
     }
 
     @Test
@@ -809,6 +834,30 @@ class PatientInvitationApiSecurityIntegrationTest {
                 "SELECT revoked_at IS NOT NULL FROM patient_access_session WHERE invitation_id = ?",
                 Boolean.class,
                 invitation.id())).isTrue();
+        Object originalRevocationTimestamp = jdbcTemplate.queryForObject(
+                "SELECT revoked_at FROM patient_access_session WHERE invitation_id = ?",
+                Object.class,
+                invitation.id());
+        assertThat(auditTypes(caseId)).containsExactly(
+                "PREPARATION_CREATED",
+                "INVITATION_ISSUED",
+                "PATIENT_ACCESS_STARTED",
+                "INVITATION_REVOKED",
+                "PATIENT_ACCESS_REVOKED");
+
+        revokeInvitation(ORGANIZATION_A, caseId, invitation.id(), physician)
+                .andExpect(status().isNoContent());
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT revoked_at FROM patient_access_session WHERE invitation_id = ?",
+                Object.class,
+                invitation.id())).isEqualTo(originalRevocationTimestamp);
+        assertThat(auditTypes(caseId)).containsExactly(
+                "PREPARATION_CREATED",
+                "INVITATION_ISSUED",
+                "PATIENT_ACCESS_STARTED",
+                "INVITATION_REVOKED",
+                "PATIENT_ACCESS_REVOKED");
     }
 
     @Test
@@ -1091,9 +1140,22 @@ class PatientInvitationApiSecurityIntegrationTest {
         return (invitationCount == null ? 0 : invitationCount) + (sessionCount == null ? 0 : sessionCount);
     }
 
+    private List<String> auditTypes(UUID caseId) {
+        return jdbcTemplate.queryForList(
+                """
+                SELECT event_type
+                FROM preparation_audit_event
+                WHERE preparation_case_id = ?
+                ORDER BY event_sequence
+                """,
+                String.class,
+                caseId);
+    }
+
     private void clearPreparationData() {
         jdbcTemplate.queryForList("SELECT storage_key FROM preparation_attachment", UUID.class)
                 .forEach(storageKey -> attachmentStorage.deleteFinal(new AttachmentStorageKey(storageKey)));
+        jdbcTemplate.update("DELETE FROM preparation_audit_event");
         jdbcTemplate.update("DELETE FROM preparation_attachment");
         jdbcTemplate.update("DELETE FROM preparation_ready_confirmation");
         jdbcTemplate.update("DELETE FROM preparation_task");
