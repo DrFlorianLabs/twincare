@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -21,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -28,8 +31,11 @@ import org.springframework.stereotype.Component;
 import backend.preparation.application.InvalidPatientAttachmentException;
 import backend.preparation.application.InvalidPatientAttachmentException.Reason;
 import backend.preparation.application.PatientAttachmentStorageUnavailableException;
+import backend.preparation.application.ProfessionalAttachmentStorageUnavailableException;
 import backend.preparation.application.port.in.PatientAttachmentUpload;
 import backend.preparation.application.port.out.PrivateAttachmentStorage;
+import backend.preparation.application.port.out.PrivateAttachmentContentReader;
+import backend.preparation.application.port.out.PreparedAttachmentContent;
 import backend.preparation.application.port.out.StagedAttachment;
 import backend.preparation.application.port.out.StagedAttachmentDeletion;
 import backend.preparation.domain.AttachmentDigest;
@@ -38,7 +44,9 @@ import backend.preparation.domain.AttachmentStorageKey;
 import backend.preparation.domain.PreparationAttachment;
 
 @Component
-public final class LocalPrivateAttachmentStorage implements PrivateAttachmentStorage {
+public final class LocalPrivateAttachmentStorage implements
+        PrivateAttachmentStorage,
+        PrivateAttachmentContentReader {
 
     private static final byte[] PDF_PREFIX = { '%', 'P', 'D', 'F', '-' };
     private static final byte[] PDF_SUFFIX = { '%', '%', 'E', 'O', 'F' };
@@ -150,6 +158,55 @@ public final class LocalPrivateAttachmentStorage implements PrivateAttachmentSto
     public void discardStaged(StagedAttachment stagedAttachment) {
         if (stagedAttachment != null) {
             discardStagedKey(stagedAttachment.storageKey());
+        }
+    }
+
+    @Override
+    public PreparedAttachmentContent openVerified(
+            AttachmentStorageKey storageKey,
+            long expectedSizeBytes,
+            AttachmentDigest expectedDigest) {
+        if (storageKey == null
+                || expectedDigest == null
+                || expectedSizeBytes <= 0
+                || expectedSizeBytes > maxSizeBytes) {
+            throw new ProfessionalAttachmentStorageUnavailableException(
+                    new IllegalStateException("Attachment download metadata is invalid"));
+        }
+        Path source = finalPath(storageKey);
+        FileChannel channel = null;
+        try {
+            ensureStorageDirectories();
+            requireRegularFile(source);
+            channel = FileChannel.open(
+                    source, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
+            MessageDigest digest = sha256();
+            long total = 0;
+            ByteBuffer buffer = ByteBuffer.allocate(8_192);
+            int read;
+            while ((read = channel.read(buffer)) != -1) {
+                if (read == 0) {
+                    continue;
+                }
+                total += read;
+                if (total > expectedSizeBytes || total > maxSizeBytes) {
+                    throw new IOException("Attachment content size does not match metadata");
+                }
+                digest.update(buffer.array(), 0, read);
+                buffer.clear();
+            }
+            String actualDigest = HexFormat.of().formatHex(digest.digest());
+            if (total != expectedSizeBytes || !actualDigest.equals(expectedDigest.value())) {
+                throw new IOException("Attachment content does not match metadata");
+            }
+            channel.position(0);
+            return new LocalPreparedAttachmentContent(channel, total);
+        } catch (IOException | RuntimeException exception) {
+            closeQuietly(channel, exception);
+            if (exception instanceof ProfessionalAttachmentStorageUnavailableException unavailable) {
+                throw unavailable;
+            }
+            throw new ProfessionalAttachmentStorageUnavailableException(exception);
         }
     }
 
@@ -489,6 +546,85 @@ public final class LocalPrivateAttachmentStorage implements PrivateAttachmentSto
             deleteRegularFileIfPresent(path);
         } catch (IOException cleanupFailure) {
             original.addSuppressed(cleanupFailure);
+        }
+    }
+
+    private void closeQuietly(FileChannel channel, Throwable original) {
+        if (channel == null) {
+            return;
+        }
+        try {
+            channel.close();
+        } catch (IOException cleanupFailure) {
+            original.addSuppressed(cleanupFailure);
+        }
+    }
+
+    private final class LocalPreparedAttachmentContent implements PreparedAttachmentContent {
+
+        private final FileChannel channel;
+        private final long sizeBytes;
+        private final AtomicBoolean claimed = new AtomicBoolean();
+        private final AtomicBoolean closed = new AtomicBoolean();
+
+        private LocalPreparedAttachmentContent(FileChannel channel, long sizeBytes) {
+            this.channel = channel;
+            this.sizeBytes = sizeBytes;
+        }
+
+        @Override
+        public long sizeBytes() {
+            return sizeBytes;
+        }
+
+        @Override
+        public void transferTo(OutputStream outputStream) throws IOException {
+            if (outputStream == null || !claimed.compareAndSet(false, true)) {
+                throw new IOException("Prepared attachment content is unavailable");
+            }
+            IOException transferFailure = null;
+            try {
+                ByteBuffer buffer = ByteBuffer.allocate(8_192);
+                int read;
+                while ((read = channel.read(buffer)) != -1) {
+                    if (read == 0) {
+                        continue;
+                    }
+                    outputStream.write(buffer.array(), 0, read);
+                    buffer.clear();
+                }
+            } catch (IOException exception) {
+                transferFailure = exception;
+                throw exception;
+            } finally {
+                try {
+                    close();
+                } catch (RuntimeException cleanupFailure) {
+                    if (transferFailure != null) {
+                        transferFailure.addSuppressed(cleanupFailure);
+                    } else {
+                        throw cleanupFailure;
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void close() {
+            if (!closed.compareAndSet(false, true)) {
+                return;
+            }
+            try {
+                channel.close();
+            } catch (IOException exception) {
+                closed.set(false);
+                throw new ProfessionalAttachmentStorageUnavailableException(exception);
+            }
+        }
+
+        @Override
+        public String toString() {
+            return "LocalPreparedAttachmentContent[content redacted]";
         }
     }
 

@@ -198,6 +198,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT,
                                 "/api/v1/organizations/*/preparation-cases/*/ready-confirmation")
                         .hasAuthority("MEDECIN")
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/organizations/*/preparation-cases/*/attachment")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
                         .requestMatchers("/api/v1/organizations/**")
                         .denyAll()
 

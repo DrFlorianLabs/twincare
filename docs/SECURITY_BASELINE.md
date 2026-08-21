@@ -79,6 +79,16 @@ An object identifier, storage filename or UUID is **not** an authorization mecha
 - Fail application startup when attachment metadata references missing bytes or
   storage reconciliation cannot complete. A missing byte object must not block
   deletion or replacement of its stale metadata.
+- For professional download, authorize the active organization membership
+  before resolving metadata or bytes; lock `case -> attachment`, then open the
+  final object once with symlink following disabled.
+- Verify actual size and SHA-256 on the pinned handle before committing response
+  headers. Stream that same handle only after the database transaction ends;
+  never lazily reopen a storage path after releasing the locks.
+- Force `Content-Disposition: attachment`, allowlisted `Content-Type`, exact
+  `Content-Length`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`
+  and `Pragma: no-cache`. Do not expose range, inline, ETag or public URL support
+  in V0.1.
 
 ## 6. Logs
 

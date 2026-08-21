@@ -15,6 +15,8 @@ import backend.preparation.application.PatientInvitationConflictException;
 import backend.preparation.application.PatientInvitationUnavailableException;
 import backend.preparation.application.PreparationCaseConflictException;
 import backend.preparation.application.PreparationCaseNotFoundException;
+import backend.preparation.application.PreparationAttachmentNotFoundException;
+import backend.preparation.application.ProfessionalAttachmentStorageUnavailableException;
 import backend.preparation.application.PreparationTaskNotFoundException;
 import backend.preparation.application.PreparationWorkflowConflictException;
 
@@ -71,6 +73,19 @@ public class GlobalExceptionHandler {
     public ResponseEntity<String> handlePreparationCaseNotFound(PreparationCaseNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body("Préparation introuvable");
+    }
+
+    @ExceptionHandler(PreparationAttachmentNotFoundException.class)
+    public ResponseEntity<String> handlePreparationAttachmentNotFound(PreparationAttachmentNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body("Document de préparation introuvable");
+    }
+
+    @ExceptionHandler(ProfessionalAttachmentStorageUnavailableException.class)
+    public ResponseEntity<String> handlePreparationAttachmentStorageUnavailable(
+            ProfessionalAttachmentStorageUnavailableException e) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body("Document de préparation temporairement indisponible");
     }
 
     @ExceptionHandler(PreparationTaskNotFoundException.class)

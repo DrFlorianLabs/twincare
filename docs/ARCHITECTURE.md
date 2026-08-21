@@ -202,6 +202,22 @@ ready confirmation is clinician-only. Organization administrators have neither
 capability by default. The read model returns task labels only in the detailed
 view, never in the bounded worklist or ordinary logs.
 
+## 4.8 Professional attachment download boundary
+
+The authenticated byte path is defined in
+[`adr/0008-professional-attachment-download.md`](adr/0008-professional-attachment-download.md).
+It requires the dedicated `DOWNLOAD_ATTACHMENT` capability before any case,
+metadata or storage read. Case and attachment are resolved under their shared
+tenant scope and locked in that order, matching patient replace/delete.
+
+The private-storage adapter opens the opaque final object once with symlink
+following disabled and verifies actual size plus SHA-256 on that same file
+channel. The verified handle is pinned before the transaction ends; the HTTP
+layer streams it after locks and the database connection have been released.
+It never lazily reopens a path that a concurrent replacement could move. The
+response is forced to download, uses only allowlisted MIME metadata, is
+`no-store`/`nosniff`, and exposes no key, digest or public URL.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:
