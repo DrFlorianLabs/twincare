@@ -113,6 +113,16 @@ Its controlled initial provisioning procedure is
 retroactively make the historical prototype routes suitable for real patient
 data.
 
+## 4.2 Patient invitation boundary
+
+The patient invitation and credential exchange are defined in
+[`adr/0002-patient-invitation-credential-exchange.md`](adr/0002-patient-invitation-credential-exchange.md).
+An invitation is a one-time bootstrap credential for exactly one preparation
+case; it is not the continuing patient session, proof of identity or consent.
+Both invitation and session secrets are stored only as domain-separated keyed
+digests. Expiry, consumption, revocation, case transition and session creation
+are server-controlled and transactional.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:

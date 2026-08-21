@@ -85,9 +85,9 @@ until every applicable gate is closed.
 
 ## Current wave
 
-- `TC-001`: pure `PreparationCase` domain and invariants.
-- `TC-002`: manual professional creation, persistence and authorization.
-- `TC-003`: secure patient invitation lifecycle.
+- `TC-001` — completed: pure `PreparationCase` domain and invariants ([PR #19](https://github.com/DrFlorianLabs/twincare-amont/pull/19)).
+- `TC-002` — completed: manual professional creation, persistence and authorization ([PR #20](https://github.com/DrFlorianLabs/twincare-amont/pull/20)).
+- `TC-003` — completed: secure patient invitation lifecycle and scoped patient session bootstrap.
 - `TC-004`: patient free-text reason and minimal structured responses.
 - `TC-005`: optional attachment linked to a preparation case.
 - `TC-006`: deterministic readiness, tasks and professional vignette.

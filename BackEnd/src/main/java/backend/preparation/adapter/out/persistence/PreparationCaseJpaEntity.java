@@ -137,4 +137,18 @@ class PreparationCaseJpaEntity {
     Instant updatedAt() {
         return updatedAt;
     }
+
+    void updateFrom(PreparationCaseJpaEntity source) {
+        if (!id.equals(source.id) || !organizationId.equals(source.organizationId)) {
+            throw new IllegalArgumentException("Preparation case identity cannot change");
+        }
+        patientReference = source.patientReference;
+        appointmentReference = source.appointmentReference;
+        scheduledAt = source.scheduledAt;
+        status = source.status;
+        patientReason = source.patientReason;
+        patientReasonProvenance = source.patientReasonProvenance;
+        patientReasonRecordedAt = source.patientReasonRecordedAt;
+        updatedAt = source.updatedAt;
+    }
 }

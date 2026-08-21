@@ -45,6 +45,7 @@ Le suivi longitudinal des maladies chroniques reste un horizon produit ultérieu
 - [`docs/ROADMAP_V0.1.md`](docs/ROADMAP_V0.1.md) — feuille de route active de TwinCare Consultation.
 - [`docs/ORGANIZATION_BOOTSTRAP.md`](docs/ORGANIZATION_BOOTSTRAP.md) — amorçage contrôlé d'une organisation sans tenant par défaut.
 - [`docs/adr/0001-organization-membership-and-scope.md`](docs/adr/0001-organization-membership-and-scope.md) — décision d'isolation organisationnelle du nouveau module.
+- [`docs/adr/0002-patient-invitation-credential-exchange.md`](docs/adr/0002-patient-invitation-credential-exchange.md) — invitation patient à usage unique et session bornée.
 
 Les prototypes, captures et documents historiques présents dans `artifacts/` documentent l'origine du projet mais ne constituent pas la spécification fonctionnelle courante.
 

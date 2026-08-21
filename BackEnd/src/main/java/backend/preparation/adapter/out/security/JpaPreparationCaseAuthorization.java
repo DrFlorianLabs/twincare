@@ -31,13 +31,14 @@ public class JpaPreparationCaseAuthorization implements PreparationCaseAuthoriza
     }
 
     @Override
-    public void requireCreatePermission(OrganizationId organizationId) {
+    public long requireStaffAccess(OrganizationId organizationId) {
         AppUtilisateur currentUser = securityHelperService.getCurrentUser();
         if (!isStaff(currentUser.getRole())
                 || !membershipRepository.existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
                         organizationId.value(), currentUser.getId(), CREATOR_ROLES)) {
             throw new UnauthorizedActionException("Accès interdit à cette organisation");
         }
+        return currentUser.getId();
     }
 
     private boolean isStaff(Role role) {

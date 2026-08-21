@@ -35,7 +35,7 @@ public final class CreatePreparationCaseService implements CreatePreparationCase
     @Override
     public CreatePreparationCaseResult create(CreatePreparationCaseCommand command) {
         Objects.requireNonNull(command, "Creation command is required");
-        authorization.requireCreatePermission(command.organizationId());
+        authorization.requireStaffAccess(command.organizationId());
 
         Instant now = clock.instant();
         PreparationCaseId id = idGenerator.nextId();
