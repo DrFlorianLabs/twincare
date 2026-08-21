@@ -12,6 +12,8 @@ Set these values outside source control:
 - `PATIENT_INVITATION_TOKEN_PEPPER` with at least 32 bytes of secret material,
   distinct from the JWT secret;
 - `CORS_ALLOWED_ORIGINS` for the deployed frontends;
+- `PATIENT_CORS_ALLOWED_ORIGINS` for patient frontends only; never include a
+  professional application origin;
 - `FILE_UPLOAD_DIR` to a private, persistent and backed-up storage location.
 
 Optional settings include `JWT_EXPIRATION_MS`, `FILE_MAX_SIZE_BYTES`,
@@ -24,8 +26,9 @@ disabled by default and restricted to administrators when enabled.
 ## Authentication and provisioning
 
 Only `POST /api/auth/login` and the exact one-time invitation exchange endpoint
-`POST /api/v1/patient-access/exchange` are anonymous. All other
-`/api/v1/patient-access/**` paths fail closed.
+`POST /api/v1/patient-access/exchange` are anonymous. The patient namespace has
+a dedicated cookie-authenticated security chain that never accepts historical
+JWT roles.
 
 - `POST /api/auth/register` provisions patient accounts and requires an
   authenticated assistant, physician or administrator. The endpoint cannot
@@ -51,10 +54,16 @@ the JSON exchange body. Query parameters and server URL paths are not accepted
 as credentials. No analytics or third-party content belongs on that entry page.
 
 Rotating `PATIENT_INVITATION_TOKEN_PEPPER` intentionally invalidates outstanding
-invitations and sessions; affected invitations must be reissued. Before TC-004
-adds a cookie-authenticated patient write, its routes must add and test CSRF
-protection. The in-process exchange limiter is a safe local baseline; a
+invitations and sessions; affected invitations must be reissued. The in-process exchange limiter is a safe local baseline; a
 multi-instance real-data deployment also requires an edge or shared limiter.
+
+`GET /api/v1/patient-access/session` validates the opaque session and returns a
+session-bound `X-TC-CSRF` header with no case, organization or patient
+identifier. The patient frontend keeps it in memory. Every unsafe patient
+request sends that header and an exact patient `Origin`. `DELETE
+/api/v1/patient-access/session` provides a protected, persistent logout and
+clears the session cookie. All other patient paths remain denied until their
+transactional authorization is implemented and tested.
 
 ## Database safety
 

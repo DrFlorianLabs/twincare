@@ -345,6 +345,26 @@ class PatientInvitationServicesTest {
         }
 
         @Override
+        public Optional<backend.preparation.application.port.out.PatientAccessSessionScope> findScopeByTokenDigest(
+                TokenDigest tokenDigest) {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<PatientAccessSession> findByIdForUpdate(
+                UUID id,
+                PatientInvitationId invitationId,
+                PreparationCaseId preparationCaseId,
+                OrganizationId organizationId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public void update(PatientAccessSession session) {
+            added = session;
+        }
+
+        @Override
         public void revokeByInvitationId(PatientInvitationId invitationId, Instant occurredAt) {
             revokedInvitationIds.add(invitationId);
         }

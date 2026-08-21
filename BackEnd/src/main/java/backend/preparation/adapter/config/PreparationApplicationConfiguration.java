@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Value;
 
 import backend.preparation.application.port.in.CreatePreparationCaseUseCase;
+import backend.preparation.application.port.in.ResolvePatientAccessSessionUseCase;
 import backend.preparation.application.port.out.PatientAccessSessionIdGenerator;
 import backend.preparation.application.port.out.PatientAccessSessionRepository;
 import backend.preparation.application.port.out.PatientInvitationExchangeGuard;
@@ -19,9 +20,11 @@ import backend.preparation.application.port.out.PreparationCaseRepository;
 import backend.preparation.application.port.out.SecureTokenDigester;
 import backend.preparation.application.port.out.SecureTokenGenerator;
 import backend.preparation.application.service.CreatePreparationCaseService;
+import backend.preparation.application.service.EndPatientAccessSessionService;
 import backend.preparation.application.service.ExchangePatientInvitationService;
 import backend.preparation.application.service.IssuePatientInvitationService;
 import backend.preparation.application.service.RevokePatientInvitationService;
+import backend.preparation.application.service.ResolvePatientAccessSessionService;
 
 @Configuration
 public class PreparationApplicationConfiguration {
@@ -84,5 +87,19 @@ public class PreparationApplicationConfiguration {
                 exchangeGuard,
                 preparationClock);
         return new TransactionalPatientInvitationUseCases(issue, revoke, exchange);
+    }
+
+    @Bean
+    TransactionalPatientSessionUseCases patientSessionUseCases(
+            PreparationCaseRepository preparationCases,
+            PatientInvitationRepository invitations,
+            PatientAccessSessionRepository accessSessions,
+            SecureTokenDigester tokenDigester,
+            Clock preparationClock) {
+        ResolvePatientAccessSessionUseCase resolve = new ResolvePatientAccessSessionService(
+                accessSessions, tokenDigester, preparationClock);
+        var end = new EndPatientAccessSessionService(
+                preparationCases, invitations, accessSessions, preparationClock);
+        return new TransactionalPatientSessionUseCases(resolve, end);
     }
 }

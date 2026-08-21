@@ -4,6 +4,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 import backend.preparation.domain.PatientAccessSession;
+import backend.preparation.domain.OrganizationId;
+import backend.preparation.domain.PatientInvitationId;
+import backend.preparation.domain.PreparationCaseId;
+import backend.preparation.domain.TokenDigest;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -68,6 +72,28 @@ class PatientAccessSessionJpaEntity {
 
     UUID invitationId() {
         return invitationId;
+    }
+
+    PatientAccessSession toDomain() {
+        return PatientAccessSession.restore(
+                id,
+                new PatientInvitationId(invitationId),
+                new OrganizationId(organizationId),
+                new PreparationCaseId(preparationCaseId),
+                new TokenDigest(tokenKeyId, tokenDigest),
+                issuedAt,
+                expiresAt,
+                java.util.Optional.ofNullable(revokedAt));
+    }
+
+    void updateFrom(PatientAccessSession session) {
+        if (!id.equals(session.id())
+                || !invitationId.equals(session.invitationId().value())
+                || !organizationId.equals(session.organizationId().value())
+                || !preparationCaseId.equals(session.preparationCaseId().value())) {
+            throw new IllegalArgumentException("Patient access session identity cannot change");
+        }
+        revokedAt = session.revokedAt().orElse(null);
     }
 
     void revoke(Instant occurredAt) {

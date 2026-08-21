@@ -15,6 +15,10 @@ public enum PreparationCaseStatus {
         return this == CLOSED || this == EXPIRED || this == CANCELLED;
     }
 
+    public boolean allowsPatientContribution() {
+        return this == PATIENT_STARTED || this == COLLECTING || this == NEEDS_ACTION;
+    }
+
     boolean canTransitionTo(PreparationCaseStatus target) {
         return switch (this) {
             case CREATED -> target == PATIENT_STARTED || target == EXPIRED || target == CANCELLED;

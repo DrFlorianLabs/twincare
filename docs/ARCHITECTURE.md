@@ -123,6 +123,15 @@ Both invitation and session secrets are stored only as domain-separated keyed
 digests. Expiry, consumption, revocation, case transition and session creation
 are server-controlled and transactional.
 
+## 4.3 Patient session boundary
+
+Patient cookie authentication and CSRF are defined in
+[`adr/0003-patient-session-authentication-and-csrf.md`](adr/0003-patient-session-authentication-and-csrf.md).
+The patient namespace uses a dedicated security chain without JWT
+authentication. A server-derived grant resolves to exactly one active
+preparation case; the browser never selects its organization, case or scope.
+Every clinical write must revalidate that grant inside the write transaction.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:
