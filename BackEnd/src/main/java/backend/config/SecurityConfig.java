@@ -86,6 +86,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/chatbot/**")
                         .hasAuthority("PATIENT")
 
+                        .requestMatchers(HttpMethod.POST, "/api/v1/organizations/*/preparation-cases")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
+                        .requestMatchers("/api/v1/organizations/**")
+                        .denyAll()
+
                         // Historical prototype APIs are intentionally dormant in V0.1.
                         .requestMatchers("/api/parcours/**", "/api/environnement/**")
                         .denyAll()

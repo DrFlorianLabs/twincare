@@ -43,6 +43,8 @@ Le suivi longitudinal des maladies chroniques reste un horizon produit ultérieu
 - [`docs/SECURITY_BASELINE.md`](docs/SECURITY_BASELINE.md) — exigences minimales de sécurité et de confidentialité.
 - [`docs/SPRINT_0.md`](docs/SPRINT_0.md) — objectifs et critères de sortie du Sprint 0.
 - [`docs/ROADMAP_V0.1.md`](docs/ROADMAP_V0.1.md) — feuille de route active de TwinCare Consultation.
+- [`docs/ORGANIZATION_BOOTSTRAP.md`](docs/ORGANIZATION_BOOTSTRAP.md) — amorçage contrôlé d'une organisation sans tenant par défaut.
+- [`docs/adr/0001-organization-membership-and-scope.md`](docs/adr/0001-organization-membership-and-scope.md) — décision d'isolation organisationnelle du nouveau module.
 
 Les prototypes, captures et documents historiques présents dans `artifacts/` documentent l'origine du projet mais ne constituent pas la spécification fonctionnelle courante.
 

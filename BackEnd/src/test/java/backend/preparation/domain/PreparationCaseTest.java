@@ -183,6 +183,19 @@ class PreparationCaseTest {
     }
 
     @Test
+    void rejectsAConsultationDeadlineBeforeCaseCreation() {
+        assertThatThrownBy(() -> PreparationCase.create(
+                new PreparationCaseId(UUID.randomUUID()),
+                new OrganizationId("cabinet-a"),
+                new PatientReference("patient-42"),
+                Optional.empty(),
+                Optional.of(CREATED_AT.minusSeconds(1)),
+                CREATED_AT))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("deadline");
+    }
+
+    @Test
     void doesNotAllowNeedsActionToBeClearedWithoutNewInput() {
         PreparationCase preparationCase = collectingCase();
         preparationCase.markReadyForReview(atMinute(3));
