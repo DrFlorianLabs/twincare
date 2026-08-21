@@ -16,7 +16,7 @@ import jakarta.servlet.http.HttpServletResponse;
 public final class ProfessionalPreparationNoStoreFilter extends OncePerRequestFilter {
 
     private static final Pattern PROFESSIONAL_PREPARATION_PATH = Pattern.compile(
-            "^/api/v1/organizations/[^/]+/preparation-cases(?:/.*)?$");
+            "^(?:/api/v1/professional-context|/api/v1/organizations/[^/]+/preparation-cases(?:/.*)?)$");
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {

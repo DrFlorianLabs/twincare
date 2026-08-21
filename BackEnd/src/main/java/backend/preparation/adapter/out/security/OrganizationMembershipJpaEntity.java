@@ -35,4 +35,8 @@ class OrganizationMembershipJpaEntity {
 
     protected OrganizationMembershipJpaEntity() {
     }
+
+    OrganizationMembershipRole membershipRole() {
+        return membershipRole;
+    }
 }

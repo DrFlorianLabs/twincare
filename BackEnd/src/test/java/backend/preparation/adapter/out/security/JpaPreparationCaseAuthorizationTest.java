@@ -9,12 +9,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.util.Collection;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import backend.entity.AppUtilisateur;
 import backend.entity.Role;
@@ -50,9 +48,7 @@ class JpaPreparationCaseAuthorizationTest {
     @Test
     void clinicianCanUseEveryDeclaredClinicalCapabilityWithAnActiveClinicianMembership() {
         when(currentUser.getRole()).thenReturn(Role.MEDECIN);
-        when(membershipRepository.existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
-                eq(ORGANIZATION_ID.value()), eq(USER_ID), anyCollection()))
-                .thenReturn(true);
+        activeMembership(OrganizationMembershipRole.CLINICIAN);
 
         for (PreparationCaseCapability capability : PreparationCaseCapability.values()) {
             assertThat(authorization.requireAccess(ORGANIZATION_ID, capability)).isEqualTo(USER_ID);
@@ -62,9 +58,7 @@ class JpaPreparationCaseAuthorizationTest {
     @Test
     void medicalAssistantCannotConfirmReady() {
         when(currentUser.getRole()).thenReturn(Role.ASSISTANT_MEDICAL);
-        when(membershipRepository.existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
-                eq(ORGANIZATION_ID.value()), eq(USER_ID), anyCollection()))
-                .thenReturn(true);
+        activeMembership(OrganizationMembershipRole.MEDICAL_ASSISTANT);
 
         assertThat(authorization.requireAccess(
                 ORGANIZATION_ID,
@@ -90,32 +84,21 @@ class JpaPreparationCaseAuthorizationTest {
                     .isInstanceOf(UnauthorizedActionException.class);
         }
         verify(membershipRepository, never())
-                .existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
-                        eq(ORGANIZATION_ID.value()), eq(USER_ID), anyCollection());
+                .findByOrganizationIdAndUserIdAndActiveTrue(ORGANIZATION_ID.value(), USER_ID);
     }
 
     @Test
     void viewMembershipRolesExcludeOrganizationAdministrators() {
         when(currentUser.getRole()).thenReturn(Role.MEDECIN);
-        when(membershipRepository.existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
-                eq(ORGANIZATION_ID.value()), eq(USER_ID), anyCollection()))
-                .thenReturn(false);
+        activeMembership(OrganizationMembershipRole.ORGANIZATION_ADMIN);
 
         assertThatThrownBy(() -> authorization.requireAccess(
                 ORGANIZATION_ID,
                 PreparationCaseCapability.VIEW_PREPARATION))
                 .isInstanceOf(UnauthorizedActionException.class);
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Collection<OrganizationMembershipRole>> roles = ArgumentCaptor.forClass(Collection.class);
-        verify(membershipRepository).existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
-                eq(ORGANIZATION_ID.value()),
-                eq(USER_ID),
-                roles.capture());
-        assertThat(roles.getValue()).containsExactlyInAnyOrder(
-                OrganizationMembershipRole.CLINICIAN,
-                OrganizationMembershipRole.MEDICAL_ASSISTANT);
-        assertThat(roles.getValue()).doesNotContain(OrganizationMembershipRole.ORGANIZATION_ADMIN);
+        verify(membershipRepository)
+                .findByOrganizationIdAndUserIdAndActiveTrue(ORGANIZATION_ID.value(), USER_ID);
     }
 
     @Test
@@ -144,5 +127,12 @@ class JpaPreparationCaseAuthorizationTest {
         verify(membershipRepository, never())
                 .existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
                         eq(ORGANIZATION_ID.value()), eq(84L), anyCollection());
+    }
+
+    private void activeMembership(OrganizationMembershipRole role) {
+        OrganizationMembershipJpaEntity membership = mock(OrganizationMembershipJpaEntity.class);
+        when(membership.membershipRole()).thenReturn(role);
+        when(membershipRepository.findByOrganizationIdAndUserIdAndActiveTrue(
+                ORGANIZATION_ID.value(), USER_ID)).thenReturn(Optional.of(membership));
     }
 }

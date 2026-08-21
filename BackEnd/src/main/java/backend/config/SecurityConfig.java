@@ -176,6 +176,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/chatbot/**")
                         .hasAuthority("PATIENT")
 
+                        .requestMatchers(HttpMethod.GET, "/api/v1/professional-context")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
+                        .requestMatchers("/api/v1/professional-context")
+                        .denyAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/organizations/*/preparation-cases")
                         .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/organizations/*/preparation-cases")

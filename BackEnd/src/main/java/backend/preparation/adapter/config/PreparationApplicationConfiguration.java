@@ -10,6 +10,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import backend.preparation.application.port.in.CreatePreparationCaseUseCase;
+import backend.preparation.application.port.in.GetProfessionalContextUseCase;
 import backend.preparation.application.port.in.PutPatientAttachmentUseCase;
 import backend.preparation.application.port.in.ResolvePatientAccessSessionUseCase;
 import backend.preparation.application.port.out.AttachmentIdGenerator;
@@ -28,6 +29,7 @@ import backend.preparation.application.port.out.PreparationTaskRepository;
 import backend.preparation.application.port.out.PreparationAttachmentRepository;
 import backend.preparation.application.port.out.PrivateAttachmentStorage;
 import backend.preparation.application.port.out.PrivateAttachmentContentReader;
+import backend.preparation.application.port.out.ProfessionalContextSource;
 import backend.preparation.application.port.out.ProfessionalPreparationQueryRepository;
 import backend.preparation.application.port.out.ProfessionalPreparationAuthorization;
 import backend.preparation.application.port.out.SecureTokenDigester;
@@ -39,6 +41,7 @@ import backend.preparation.application.service.DownloadProfessionalAttachmentSer
 import backend.preparation.application.service.EndPatientAccessSessionService;
 import backend.preparation.application.service.ExchangePatientInvitationService;
 import backend.preparation.application.service.GetPatientAttachmentService;
+import backend.preparation.application.service.GetProfessionalContextService;
 import backend.preparation.application.service.IssuePatientInvitationService;
 import backend.preparation.application.service.RecordPatientReasonService;
 import backend.preparation.application.service.PatientAttachmentScopeLock;
@@ -159,6 +162,11 @@ public class PreparationApplicationConfiguration {
             PrivateAttachmentStorage storage,
             TransactionalPatientAttachmentUseCases transactionalUseCases) {
         return new PutPatientAttachmentCoordinator(storage, transactionalUseCases);
+    }
+
+    @Bean
+    GetProfessionalContextUseCase professionalContextUseCase(ProfessionalContextSource source) {
+        return new GetProfessionalContextService(source);
     }
 
     @Bean

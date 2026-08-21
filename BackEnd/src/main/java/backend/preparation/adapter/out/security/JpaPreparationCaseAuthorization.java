@@ -52,20 +52,15 @@ public class JpaPreparationCaseAuthorization implements
     @Override
     public long requireAccess(OrganizationId organizationId, PreparationCaseCapability capability) {
         AppUtilisateur currentUser = securityHelperService.getCurrentUser();
-        Set<OrganizationMembershipRole> allowedMembershipRoles = switch (capability) {
-            case VIEW_PREPARATION, MANAGE_PREPARATION_TASKS, DOWNLOAD_ATTACHMENT -> EnumSet.of(
-                    OrganizationMembershipRole.CLINICIAN,
-                    OrganizationMembershipRole.MEDICAL_ASSISTANT);
-            case CONFIRM_READY_FOR_CONSULTATION -> EnumSet.of(OrganizationMembershipRole.CLINICIAN);
-        };
-        boolean allowedPlatformRole = switch (capability) {
-            case VIEW_PREPARATION, MANAGE_PREPARATION_TASKS, DOWNLOAD_ATTACHMENT ->
-                currentUser.getRole() == Role.MEDECIN || currentUser.getRole() == Role.ASSISTANT_MEDICAL;
-            case CONFIRM_READY_FOR_CONSULTATION -> currentUser.getRole() == Role.MEDECIN;
-        };
-        if (!allowedPlatformRole
-                || !membershipRepository.existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
-                        organizationId.value(), currentUser.getId(), allowedMembershipRoles)) {
+        if (currentUser.getRole() != Role.MEDECIN
+                && currentUser.getRole() != Role.ASSISTANT_MEDICAL) {
+            throw new UnauthorizedActionException("Accès interdit à cette organisation");
+        }
+        var membership = membershipRepository.findByOrganizationIdAndUserIdAndActiveTrue(
+                organizationId.value(), currentUser.getId());
+        if (membership.isEmpty()
+                || !PreparationCapabilityPolicy.capabilitiesFor(
+                        currentUser.getRole(), membership.get().membershipRole()).contains(capability)) {
             throw new UnauthorizedActionException("Accès interdit à cette organisation");
         }
         return currentUser.getId();

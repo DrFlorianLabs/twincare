@@ -57,6 +57,9 @@ For staff:
 - ready evidence must be revalidated on every read, and multi-query clinical
   views must use one consistent database snapshot.
 - professional preparation responses, including errors, must be `no-store`.
+- professional organization and capability discovery is derived exclusively
+  from the authenticated server identity and active memberships; client-side
+  context remains advisory and never replaces use-case authorization.
 
 An object identifier, storage filename or UUID is **not** an authorization mechanism.
 

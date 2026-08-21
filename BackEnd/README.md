@@ -89,6 +89,12 @@ The patient API never exposes bytes, scope identifiers, storage keys or digests.
 
 ## Professional preparation view
 
+`GET /api/v1/professional-context` returns the authenticated professional's own
+minimal identity plus active clinical organizations and UI capabilities. It
+accepts no actor or organization input, omits inactive/administrative-only
+memberships and is always `no-store`. Downstream endpoints still repeat their
+own server-side authorization.
+
 `GET /api/v1/organizations/{organizationId}/preparation-cases` returns a
 bounded paginated worklist. It deliberately excludes the full patient reason.
 `GET /api/v1/organizations/{organizationId}/preparation-cases/{caseId}/preparation-view`
