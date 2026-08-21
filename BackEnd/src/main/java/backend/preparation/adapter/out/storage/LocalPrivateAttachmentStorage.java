@@ -582,18 +582,23 @@ public final class LocalPrivateAttachmentStorage implements
             if (outputStream == null || !claimed.compareAndSet(false, true)) {
                 throw new IOException("Prepared attachment content is unavailable");
             }
-            IOException transferFailure = null;
+            Throwable transferFailure = null;
             try {
                 ByteBuffer buffer = ByteBuffer.allocate(8_192);
-                int read;
-                while ((read = channel.read(buffer)) != -1) {
+                int read = readFromStorage(buffer);
+                while (read != -1) {
                     if (read == 0) {
+                        read = readFromStorage(buffer);
                         continue;
                     }
                     outputStream.write(buffer.array(), 0, read);
                     buffer.clear();
+                    read = readFromStorage(buffer);
                 }
             } catch (IOException exception) {
+                transferFailure = exception;
+                throw exception;
+            } catch (RuntimeException exception) {
                 transferFailure = exception;
                 throw exception;
             } finally {
@@ -606,6 +611,14 @@ public final class LocalPrivateAttachmentStorage implements
                         throw cleanupFailure;
                     }
                 }
+            }
+        }
+
+        private int readFromStorage(ByteBuffer buffer) {
+            try {
+                return channel.read(buffer);
+            } catch (IOException exception) {
+                throw new ProfessionalAttachmentStorageUnavailableException(exception);
             }
         }
 

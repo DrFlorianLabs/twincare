@@ -196,6 +196,22 @@ class LocalPrivateAttachmentStorageTest {
         content.close();
     }
 
+    @Test
+    void storageReadFailureIsNotMisclassifiedAsAClientDisconnect() throws Exception {
+        LocalPrivateAttachmentStorage storage = storage(1_000_000);
+        byte[] bytes = pdf("synthetic-storage-read-failure");
+        var staged = storage.stage(upload(
+                "result.pdf", "application/pdf", bytes, bytes.length));
+        storage.promote(staged);
+        var content = storage.openVerified(
+                staged.storageKey(), staged.sizeBytes(), staged.digest());
+        content.close();
+
+        assertThatThrownBy(() -> content.transferTo(new java.io.ByteArrayOutputStream()))
+                .isInstanceOf(ProfessionalAttachmentStorageUnavailableException.class)
+                .hasCauseInstanceOf(java.nio.channels.ClosedChannelException.class);
+    }
+
     private LocalPrivateAttachmentStorage storage(long maxSize) {
         return new LocalPrivateAttachmentStorage(tempDir.toString(), maxSize);
     }
