@@ -1,5 +1,20 @@
 # TwinCare — Sprint 0
 
+Status: **COMPLETED — 2026-08-21**
+
+Closure evidence:
+
+- product, architecture and security baselines merged through PR #1;
+- independent corrective review merged through PR #2;
+- PR #2 CI completed successfully for the backend and both frontends;
+- backend verification rerun from the merged source: 43 tests passed;
+- no Sprint 1 feature was mixed into the corrective Sprint 0 pull request.
+
+Residual items listed below are release gates for a real-patient pilot, not
+unfinished Sprint 0 scope. The historical patient/runtime PDF remains excluded
+from the current tree; its possible removal from Git history requires a separate
+controlled investigation without opening or reusing the file.
+
 Goal: **make the repository safe and conceptually stable enough to build the real V0.1 without amplifying prototype debt.**
 
 ## Sprint exit criteria
