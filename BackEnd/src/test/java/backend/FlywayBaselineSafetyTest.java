@@ -69,6 +69,112 @@ class FlywayBaselineSafetyTest {
     }
 
     @Test
+    void upgradesV7WithTenantBoundSingletonAttachmentConstraints() throws Exception {
+        String databaseName = "v7_attachment_" + UUID.randomUUID().toString().replace("-", "");
+        String url = "jdbc:h2:mem:" + databaseName + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
+
+        Flyway.configure()
+                .dataSource(url, "sa", "")
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion(MigrationVersion.fromVersion("4"))
+                .target(MigrationVersion.fromVersion("7"))
+                .load()
+                .migrate();
+
+        try (var connection = DriverManager.getConnection(url, "sa", "");
+                var statement = connection.createStatement()) {
+            statement.execute("""
+                    INSERT INTO care_organization (id, display_name, created_at)
+                    VALUES
+                        ('attachment-org-a', 'Synthetic A', CURRENT_TIMESTAMP),
+                        ('attachment-org-b', 'Synthetic B', CURRENT_TIMESTAMP)
+                    """);
+            statement.execute("""
+                    INSERT INTO preparation_case (
+                        id, organization_id, patient_reference, appointment_reference,
+                        status, created_at, updated_at, version
+                    ) VALUES (
+                        UUID '10000000-0000-0000-0000-000000000001',
+                        'attachment-org-a', 'synthetic-patient', 'synthetic-appointment',
+                        'PATIENT_STARTED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+                    ), (
+                        UUID '10000000-0000-0000-0000-000000000002',
+                        'attachment-org-a', 'synthetic-patient-2', 'synthetic-appointment-2',
+                        'PATIENT_STARTED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+                    )
+                    """);
+        }
+
+        Flyway.configure()
+                .dataSource(url, "sa", "")
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion(MigrationVersion.fromVersion("4"))
+                .load()
+                .migrate();
+
+        try (var connection = DriverManager.getConnection(url, "sa", "");
+                var statement = connection.createStatement()) {
+            statement.execute("""
+                    INSERT INTO preparation_attachment (
+                        id, organization_id, preparation_case_id, storage_key,
+                        display_filename, media_type, size_bytes, sha256_digest,
+                        provenance, uploaded_at, updated_at, version
+                    ) VALUES (
+                        UUID '20000000-0000-0000-0000-000000000001',
+                        'attachment-org-a', UUID '10000000-0000-0000-0000-000000000001',
+                        UUID '30000000-0000-0000-0000-000000000001',
+                        'synthetic.pdf', 'PDF', 42, REPEAT('a', 64),
+                        'PATIENT_UPLOADED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+                    )
+                    """);
+
+            assertThatThrownBy(() -> statement.execute("""
+                    INSERT INTO preparation_attachment (
+                        id, organization_id, preparation_case_id, storage_key,
+                        display_filename, media_type, size_bytes, sha256_digest,
+                        provenance, uploaded_at, updated_at, version
+                    ) VALUES (
+                        RANDOM_UUID(), 'attachment-org-a',
+                        UUID '10000000-0000-0000-0000-000000000001', RANDOM_UUID(),
+                        'duplicate.pdf', 'PDF', 42, REPEAT('b', 64),
+                        'PATIENT_UPLOADED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+                    )
+                    """))
+                    .hasMessageContaining("UQ_PREPARATION_ATTACHMENT_CASE");
+
+            assertThatThrownBy(() -> statement.execute("""
+                    INSERT INTO preparation_attachment (
+                        id, organization_id, preparation_case_id, storage_key,
+                        display_filename, media_type, size_bytes, sha256_digest,
+                        provenance, uploaded_at, updated_at, version
+                    ) VALUES (
+                        RANDOM_UUID(), 'attachment-org-b',
+                        UUID '10000000-0000-0000-0000-000000000001', RANDOM_UUID(),
+                        'cross-tenant.pdf', 'PDF', 42, REPEAT('c', 64),
+                        'PATIENT_UPLOADED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+                    )
+                    """))
+                    .hasMessageContaining("FK_PREPARATION_ATTACHMENT_CASE_ORGANIZATION");
+
+            assertThatThrownBy(() -> statement.execute("""
+                    INSERT INTO preparation_attachment (
+                        id, organization_id, preparation_case_id, storage_key,
+                        display_filename, media_type, size_bytes, sha256_digest,
+                        provenance, uploaded_at, updated_at, version
+                    ) VALUES (
+                        RANDOM_UUID(), 'attachment-org-a',
+                        UUID '10000000-0000-0000-0000-000000000002', RANDOM_UUID(),
+                        'invalid-digest.pdf', 'PDF', 42, REPEAT('g', 64),
+                        'PATIENT_UPLOADED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+                    )
+                    """))
+                    .hasMessageContaining("CK_PREPARATION_ATTACHMENT_DIGEST");
+        }
+    }
+
+    @Test
     void migratesFreshSchemaThroughPrototypeBaseline() throws Exception {
         String databaseName = "fresh_" + UUID.randomUUID().toString().replace("-", "");
         String url = "jdbc:h2:mem:" + databaseName + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
@@ -98,6 +204,13 @@ class FlywayBaselineSafetyTest {
         try (var connection = DriverManager.getConnection(url, "sa", "");
                 var statement = connection.createStatement();
                 var result = statement.executeQuery("SELECT COUNT(*) FROM patient_invitation")) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getInt(1)).isZero();
+        }
+
+        try (var connection = DriverManager.getConnection(url, "sa", "");
+                var statement = connection.createStatement();
+                var result = statement.executeQuery("SELECT COUNT(*) FROM preparation_attachment")) {
             assertThat(result.next()).isTrue();
             assertThat(result.getInt(1)).isZero();
         }

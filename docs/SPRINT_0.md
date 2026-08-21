@@ -76,9 +76,8 @@ Sprint 0 is complete when:
 
 ### Still required before real-patient pilot
 
-- Organisation/tenant authorization model.
+- Complete organisation/tenant authorization across every retained sensitive route.
 - Formal audit event model.
-- Secure patient invitation/token lifecycle tied to a preparation case.
 - Threat model and penetration/security review.
 - HDS/deployment architecture and operational controls.
 - Retention/deletion policy and backup/restore tests.

@@ -61,6 +61,12 @@ An object identifier, storage filename or UUID is **not** an authorization mecha
 - Keep metadata and bytes consistent across transaction failure: quarantine
   deletions until database commit, restore them on rollback, remove new uploads
   on rollback, and reconcile interrupted quarantines at startup.
+- Keep multipart parser temporary files in a dedicated private runtime
+  directory, outside Git and historical upload roots; purge abandoned regular
+  files without following symlinks.
+- Fail application startup when attachment metadata references missing bytes or
+  storage reconciliation cannot complete. A missing byte object must not block
+  deletion or replacement of its stale metadata.
 
 ## 6. Logs
 

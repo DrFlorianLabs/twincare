@@ -27,6 +27,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import backend.security.JwtAuthenticationFilter;
 import backend.preparation.adapter.in.web.PatientCsrfTokenRepository;
+import backend.preparation.adapter.in.web.PatientAttachmentUploadConcurrencyFilter;
 import backend.preparation.adapter.in.web.PatientMutationOriginFilter;
 import backend.preparation.adapter.in.web.PatientPreparationPrincipal;
 import backend.preparation.adapter.in.web.PatientSecurityResponses;
@@ -68,6 +69,7 @@ public class SecurityConfig {
             HttpSecurity http,
             PatientSessionAuthenticationFilter patientSessionFilter,
             PatientMutationOriginFilter originFilter,
+            PatientAttachmentUploadConcurrencyFilter uploadConcurrencyFilter,
             PatientCsrfTokenRepository csrfTokenRepository,
             PatientSecurityResponses securityResponses) throws Exception {
         var csrfRequestHandler = new CsrfTokenRequestAttributeHandler();
@@ -93,12 +95,25 @@ public class SecurityConfig {
                         .hasAuthority(PatientPreparationPrincipal.AUTHORITY)
                         .requestMatchers(HttpMethod.PUT, "/api/v1/patient-access/reason")
                         .hasAuthority(PatientPreparationPrincipal.AUTHORITY)
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/patient-access/attachment")
+                        .hasAuthority(PatientPreparationPrincipal.AUTHORITY)
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/api/v1/patient-access/attachment")
+                        .hasAuthority(PatientPreparationPrincipal.AUTHORITY)
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/api/v1/patient-access/attachment")
+                        .hasAuthority(PatientPreparationPrincipal.AUTHORITY)
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/patient-access/session")
                         .hasAuthority(PatientPreparationPrincipal.AUTHORITY)
                         .anyRequest().denyAll());
 
         http.addFilterBefore(patientSessionFilter, CsrfFilter.class);
         http.addFilterAfter(originFilter, PatientSessionAuthenticationFilter.class);
+        http.addFilterAfter(uploadConcurrencyFilter, PatientMutationOriginFilter.class);
         return http.build();
     }
 
@@ -204,6 +219,15 @@ public class SecurityConfig {
     FilterRegistrationBean<PatientMutationOriginFilter> disablePatientOriginFilterAutoRegistration(
             PatientMutationOriginFilter filter) {
         FilterRegistrationBean<PatientMutationOriginFilter> registration =
+                new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    FilterRegistrationBean<PatientAttachmentUploadConcurrencyFilter> disablePatientUploadFilterAutoRegistration(
+            PatientAttachmentUploadConcurrencyFilter filter) {
+        FilterRegistrationBean<PatientAttachmentUploadConcurrencyFilter> registration =
                 new FilterRegistrationBean<>(filter);
         registration.setEnabled(false);
         return registration;
