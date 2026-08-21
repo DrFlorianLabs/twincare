@@ -45,8 +45,25 @@ public class JpaPreparationCaseRepositoryAdapter implements PreparationCaseRepos
     }
 
     @Override
+    public void update(PreparationCase preparationCase) {
+        PreparationCaseJpaEntity managed = repository
+                .findByIdAndOrganizationId(
+                        preparationCase.id().value(),
+                        preparationCase.organizationId().value())
+                .orElseThrow(() -> new IllegalStateException("Preparation case disappeared during update"));
+        managed.updateFrom(mapper.toEntity(preparationCase));
+        repository.saveAndFlush(managed);
+    }
+
+    @Override
     public Optional<PreparationCase> findById(PreparationCaseId id, OrganizationId organizationId) {
         return repository.findByIdAndOrganizationId(id.value(), organizationId.value())
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public Optional<PreparationCase> findByIdForUpdate(PreparationCaseId id, OrganizationId organizationId) {
+        return repository.findByIdAndOrganizationIdForUpdate(id.value(), organizationId.value())
                 .map(mapper::toDomain);
     }
 }

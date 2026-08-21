@@ -77,8 +77,7 @@ class CreatePreparationCaseServiceTest {
     void mapsExpectedDomainValidationWithoutPersisting() {
         RecordingRepository repository = new RecordingRepository();
         CreatePreparationCaseService service = new CreatePreparationCaseService(
-                organizationId -> {
-                },
+                organizationId -> 17L,
                 repository,
                 () -> CASE_ID,
                 Clock.fixed(NOW, ZoneOffset.UTC));
@@ -105,8 +104,9 @@ class CreatePreparationCaseServiceTest {
         private OrganizationId authorizedOrganization;
 
         @Override
-        public void requireCreatePermission(OrganizationId organizationId) {
+        public long requireStaffAccess(OrganizationId organizationId) {
             authorizedOrganization = organizationId;
+            return 17L;
         }
     }
 
@@ -119,10 +119,20 @@ class CreatePreparationCaseServiceTest {
         }
 
         @Override
+        public void update(PreparationCase preparationCase) {
+            added = preparationCase;
+        }
+
+        @Override
         public Optional<PreparationCase> findById(PreparationCaseId id, OrganizationId organizationId) {
             return Optional.ofNullable(added)
                     .filter(preparationCase -> preparationCase.id().equals(id))
                     .filter(preparationCase -> preparationCase.organizationId().equals(organizationId));
+        }
+
+        @Override
+        public Optional<PreparationCase> findByIdForUpdate(PreparationCaseId id, OrganizationId organizationId) {
+            return findById(id, organizationId);
         }
     }
 }

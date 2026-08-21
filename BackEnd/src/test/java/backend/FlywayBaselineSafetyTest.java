@@ -38,6 +38,13 @@ class FlywayBaselineSafetyTest {
             assertThat(result.next()).isTrue();
             assertThat(result.getInt(1)).isZero();
         }
+
+        try (var connection = DriverManager.getConnection(url, "sa", "");
+                var statement = connection.createStatement();
+                var result = statement.executeQuery("SELECT COUNT(*) FROM patient_invitation")) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getInt(1)).isZero();
+        }
     }
 
     @Test
@@ -106,6 +113,8 @@ class FlywayBaselineSafetyTest {
                     )
                     """))
                     .hasMessageContaining("UQ_PREPARATION_CASE_PATIENT_SCHEDULE");
+
+            assertThat(statement.executeQuery("SELECT COUNT(*) FROM patient_invitation").next()).isTrue();
         }
     }
 }

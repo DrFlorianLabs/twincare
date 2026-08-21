@@ -10,5 +10,9 @@ public interface PreparationCaseRepository {
 
     void add(PreparationCase preparationCase);
 
+    void update(PreparationCase preparationCase);
+
     Optional<PreparationCase> findById(PreparationCaseId id, OrganizationId organizationId);
+
+    Optional<PreparationCase> findByIdForUpdate(PreparationCaseId id, OrganizationId organizationId);
 }

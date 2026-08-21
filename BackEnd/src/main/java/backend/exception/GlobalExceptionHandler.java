@@ -11,7 +11,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import backend.preparation.application.InvalidPreparationCaseCommandException;
+import backend.preparation.application.PatientInvitationConflictException;
+import backend.preparation.application.PatientInvitationUnavailableException;
 import backend.preparation.application.PreparationCaseConflictException;
+import backend.preparation.application.PreparationCaseNotFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -60,6 +63,24 @@ public class GlobalExceptionHandler {
     public ResponseEntity<String> handleConflict(PreparationCaseConflictException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body("Une préparation existe déjà pour cette consultation");
+    }
+
+    @ExceptionHandler(PreparationCaseNotFoundException.class)
+    public ResponseEntity<String> handlePreparationCaseNotFound(PreparationCaseNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body("Préparation introuvable");
+    }
+
+    @ExceptionHandler(PatientInvitationConflictException.class)
+    public ResponseEntity<String> handlePatientInvitationConflict(PatientInvitationConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body("L'invitation patient n'est pas disponible dans l'état actuel");
+    }
+
+    @ExceptionHandler(PatientInvitationUnavailableException.class)
+    public ResponseEntity<String> handlePatientInvitationUnavailable(PatientInvitationUnavailableException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body("Invitation patient indisponible");
     }
 
     @ExceptionHandler(Exception.class)

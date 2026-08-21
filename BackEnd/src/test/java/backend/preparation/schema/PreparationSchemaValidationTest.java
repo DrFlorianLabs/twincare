@@ -43,7 +43,11 @@ class PreparationSchemaValidationTest {
                 """,
                 String.class);
 
-        assertThat(version).isEqualTo("5");
+        assertThat(version).isEqualTo("6");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM patient_invitation", Integer.class))
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM patient_access_session", Integer.class))
+                .isZero();
     }
 
     @Configuration(proxyBeanMethods = false)

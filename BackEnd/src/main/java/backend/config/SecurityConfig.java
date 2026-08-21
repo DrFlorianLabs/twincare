@@ -88,7 +88,18 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.POST, "/api/v1/organizations/*/preparation-cases")
                         .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/organizations/*/preparation-cases/*/invitations")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE,
+                                "/api/v1/organizations/*/preparation-cases/*/invitations/*")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
                         .requestMatchers("/api/v1/organizations/**")
+                        .denyAll()
+
+                        .requestMatchers(HttpMethod.POST, "/api/v1/patient-access/exchange")
+                        .permitAll()
+                        .requestMatchers("/api/v1/patient-access/**")
                         .denyAll()
 
                         // Historical prototype APIs are intentionally dormant in V0.1.

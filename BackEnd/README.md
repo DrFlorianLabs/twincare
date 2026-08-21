@@ -9,16 +9,23 @@ Set these values outside source control:
 
 - `JDBC_DATABASE_URL`, `JDBC_DATABASE_USERNAME`, `JDBC_DATABASE_PASSWORD`;
 - `JWT_SECRET` with at least 32 bytes of secret material;
+- `PATIENT_INVITATION_TOKEN_PEPPER` with at least 32 bytes of secret material,
+  distinct from the JWT secret;
 - `CORS_ALLOWED_ORIGINS` for the deployed frontends;
 - `FILE_UPLOAD_DIR` to a private, persistent and backed-up storage location.
 
-Optional settings include `JWT_EXPIRATION_MS`, `FILE_MAX_SIZE_BYTES` and
-`SPRINGDOC_ENABLED`. API documentation is disabled by default and restricted to
-administrators when enabled.
+Optional settings include `JWT_EXPIRATION_MS`, `FILE_MAX_SIZE_BYTES`,
+`PATIENT_INVITATION_TTL`, `PATIENT_INVITATION_TOKEN_KEY_ID`,
+`PATIENT_INVITATION_EXCHANGE_RATE_LIMIT`, `PATIENT_SESSION_COOKIE_SECURE` and
+`SPRINGDOC_ENABLED`. Patient session cookies are secure by default; disabling
+that flag is limited to an explicit local HTTP setup. API documentation is
+disabled by default and restricted to administrators when enabled.
 
 ## Authentication and provisioning
 
-Only `POST /api/auth/login` is anonymous.
+Only `POST /api/auth/login` and the exact one-time invitation exchange endpoint
+`POST /api/v1/patient-access/exchange` are anonymous. All other
+`/api/v1/patient-access/**` paths fail closed.
 
 - `POST /api/auth/register` provisions patient accounts and requires an
   authenticated assistant, physician or administrator. The endpoint cannot
@@ -29,6 +36,25 @@ Only `POST /api/auth/login` is anonymous.
 
 Authorization is enforced again in services. Never infer access from a client
 role, client-supplied actor identifier, document UUID or route identifier alone.
+
+## Patient invitation security
+
+An authorized organization member may issue a short-lived invitation for one
+preparation case. The raw invitation secret is returned once, while only a
+domain-separated HMAC-SHA-256 digest is stored. Anonymous exchange consumes the
+invitation atomically, starts the case and creates a case-scoped session in an
+`HttpOnly`, `Secure`, `SameSite=Strict` cookie.
+
+The future patient frontend must receive the invitation secret in the browser
+URL fragment, remove it immediately with `history.replaceState`, and send it in
+the JSON exchange body. Query parameters and server URL paths are not accepted
+as credentials. No analytics or third-party content belongs on that entry page.
+
+Rotating `PATIENT_INVITATION_TOKEN_PEPPER` intentionally invalidates outstanding
+invitations and sessions; affected invitations must be reissued. Before TC-004
+adds a cookie-authenticated patient write, its routes must add and test CSRF
+protection. The in-process exchange limiter is a safe local baseline; a
+multi-instance real-data deployment also requires an edge or shared limiter.
 
 ## Database safety
 
