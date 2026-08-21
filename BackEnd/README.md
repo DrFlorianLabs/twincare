@@ -87,6 +87,24 @@ idempotently. Upload is limited to one in-flight request per patient session,
 10 MiB of actual bytes, exact MIME/signature agreement and a sanitized filename.
 The patient API never exposes bytes, scope identifiers, storage keys or digests.
 
+## Professional preparation view
+
+`GET /api/v1/organizations/{organizationId}/preparation-cases` returns a
+bounded paginated worklist. It deliberately excludes the full patient reason.
+`GET /api/v1/organizations/{organizationId}/preparation-cases/{caseId}/preparation-view`
+returns the exact declared reason, safe attachment metadata and a deterministic
+readiness assessment. Both responses are `no-store` and never expose storage
+keys or digests.
+
+Readiness currently uses the versioned `CORE_PREPARATION` V1 rules. An absent
+optional attachment is not a blocker and no clinical meaning is inferred from
+patient prose. Active clinicians and medical assistants may view these data;
+organization administrators have no clinical access by default.
+
+TC-006a cannot emit `READY` because it deliberately has no persisted clinician
+confirmation. A stored ready status without confirmation evidence fails closed;
+TC-006b adds that evidence and its authorized transition.
+
 ## Database safety
 
 Flyway migration V3 is a destructive historical prototype migration and is kept
