@@ -46,6 +46,7 @@ Le suivi longitudinal des maladies chroniques reste un horizon produit ultérieu
 - [`docs/ORGANIZATION_BOOTSTRAP.md`](docs/ORGANIZATION_BOOTSTRAP.md) — amorçage contrôlé d'une organisation sans tenant par défaut.
 - [`docs/adr/0001-organization-membership-and-scope.md`](docs/adr/0001-organization-membership-and-scope.md) — décision d'isolation organisationnelle du nouveau module.
 - [`docs/adr/0002-patient-invitation-credential-exchange.md`](docs/adr/0002-patient-invitation-credential-exchange.md) — invitation patient à usage unique et session bornée.
+- [`docs/adr/0003-patient-session-authentication-and-csrf.md`](docs/adr/0003-patient-session-authentication-and-csrf.md) — authentification de session patient et protection CSRF.
 
 Les prototypes, captures et documents historiques présents dans `artifacts/` documentent l'origine du projet mais ne constituent pas la spécification fonctionnelle courante.
 

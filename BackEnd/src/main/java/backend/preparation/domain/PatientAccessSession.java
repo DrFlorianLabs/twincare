@@ -65,7 +65,14 @@ public final class PatientAccessSession {
             Instant expiresAt,
             Optional<Instant> revokedAt) {
         return new PatientAccessSession(
-                id, invitationId, organizationId, preparationCaseId, tokenDigest, issuedAt, expiresAt, revokedAt);
+                id,
+                invitationId,
+                organizationId,
+                preparationCaseId,
+                tokenDigest,
+                issuedAt,
+                expiresAt,
+                revokedAt);
     }
 
     public void revoke(Instant occurredAt) {
@@ -74,6 +81,11 @@ public final class PatientAccessSession {
             throw new IllegalArgumentException("Revocation timestamp cannot precede session issue");
         }
         revokedAt = Optional.of(occurredAt);
+    }
+
+    public boolean isActiveAt(Instant instant) {
+        Objects.requireNonNull(instant, "Session validation timestamp is required");
+        return revokedAt.isEmpty() && !instant.isBefore(issuedAt) && instant.isBefore(expiresAt);
     }
 
     public UUID id() {

@@ -13,7 +13,11 @@ public record SecureToken(String value) {
     }
 
     private static boolean isUrlSafeCharacter(int character) {
-        return Character.isLetterOrDigit(character) || character == '-' || character == '_';
+        return (character >= 'A' && character <= 'Z')
+                || (character >= 'a' && character <= 'z')
+                || (character >= '0' && character <= '9')
+                || character == '-'
+                || character == '_';
     }
 
     @Override

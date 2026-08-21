@@ -7,6 +7,10 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,6 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import backend.preparation.application.port.in.ExchangePatientInvitationCommand;
 import backend.preparation.application.port.in.ExchangePatientInvitationUseCase;
+import backend.preparation.application.port.in.EndPatientAccessSessionCommand;
+import backend.preparation.application.port.in.EndPatientAccessSessionUseCase;
 
 @RestController
 @RequestMapping("/api/v1/patient-access")
@@ -22,12 +28,18 @@ public class PatientAccessController {
     static final String SESSION_COOKIE = "tc_preparation_session";
 
     private final ExchangePatientInvitationUseCase exchangeInvitation;
+    private final EndPatientAccessSessionUseCase endSession;
+    private final PatientSecurityResponses securityResponses;
     private final boolean secureCookie;
 
     public PatientAccessController(
             ExchangePatientInvitationUseCase exchangeInvitation,
+            EndPatientAccessSessionUseCase endSession,
+            PatientSecurityResponses securityResponses,
             @Value("${app.preparation.patient-session-cookie-secure:true}") boolean secureCookie) {
         this.exchangeInvitation = exchangeInvitation;
+        this.endSession = endSession;
+        this.securityResponses = securityResponses;
         this.secureCookie = secureCookie;
     }
 
@@ -48,5 +60,27 @@ public class PatientAccessController {
                 .header("Referrer-Policy", "no-referrer")
                 .header("X-Content-Type-Options", "nosniff")
                 .body(new ExchangePatientInvitationResponse("PATIENT_STARTED", result.expiresAt()));
+    }
+
+    @GetMapping("/session")
+    public ResponseEntity<PatientSessionResponse> session(
+            @AuthenticationPrincipal PatientPreparationPrincipal principal,
+            CsrfToken csrfToken) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header("Referrer-Policy", "no-referrer")
+                .header("X-Content-Type-Options", "nosniff")
+                .header(PatientCsrfTokenRepository.HEADER_NAME, csrfToken.getToken())
+                .body(new PatientSessionResponse("ACTIVE", principal.grant().expiresAt()));
+    }
+
+    @DeleteMapping("/session")
+    public ResponseEntity<Void> endSession(@AuthenticationPrincipal PatientPreparationPrincipal principal) {
+        endSession.end(new EndPatientAccessSessionCommand(principal.grant()));
+        return ResponseEntity.noContent()
+                .cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.SET_COOKIE, securityResponses.expiredSessionCookie().toString())
+                .header("Referrer-Policy", "no-referrer")
+                .build();
     }
 }

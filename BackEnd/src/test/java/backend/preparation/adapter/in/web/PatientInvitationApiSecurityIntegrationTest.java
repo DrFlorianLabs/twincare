@@ -2,6 +2,7 @@ package backend.preparation.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -39,10 +40,14 @@ import backend.dao.AppUtilisateurRepository;
 import backend.entity.AppUtilisateur;
 import backend.entity.Role;
 import backend.entity.Sexe;
+import backend.preparation.application.port.out.PatientAccessSessionRepository;
+import backend.preparation.application.port.out.SecureTokenDigester;
+import backend.preparation.domain.SecureToken;
 import backend.security.JwtService;
 import backend.security.UtilisateurSecurite;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import jakarta.servlet.http.Cookie;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -63,6 +68,10 @@ class PatientInvitationApiSecurityIntegrationTest {
     private AppUtilisateurRepository utilisateurRepository;
     @Autowired
     private JdbcTemplate jdbcTemplate;
+    @Autowired
+    private PatientAccessSessionRepository accessSessionRepository;
+    @Autowired
+    private SecureTokenDigester secureTokenDigester;
 
     private AppUtilisateur physician;
 
@@ -180,6 +189,180 @@ class PatientInvitationApiSecurityIntegrationTest {
     }
 
     @Test
+    void patientSessionResolvesToOneOpaqueActiveContextAndIssuesBoundCsrf() throws Exception {
+        UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-session-resume");
+        IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
+        String sessionToken = exchangedSessionToken(invitation.token());
+
+        assertThat(accessSessionRepository.findScopeByTokenDigest(
+                secureTokenDigester.digestSession(new SecureToken(sessionToken))))
+                .isPresent();
+
+        MvcResult resumed = mockMvc.perform(get("/api/v1/patient-access/session")
+                        .cookie(sessionCookie(sessionToken)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(header().string(PatientCsrfTokenRepository.HEADER_NAME,
+                        org.hamcrest.Matchers.matchesPattern("[A-Za-z0-9_-]{43}")))
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.expiresAt").exists())
+                .andExpect(jsonPath("$.preparationCaseId").doesNotExist())
+                .andExpect(jsonPath("$.organizationId").doesNotExist())
+                .andReturn();
+
+        assertThat(resumed.getResponse().getContentAsString())
+                .doesNotContain(caseId.toString(), ORGANIZATION_A, sessionToken);
+    }
+
+    @Test
+    void absentMultipleMalformedUnknownExpiredRevokedAndTerminalSessionsShareOneFailure() throws Exception {
+        UUID expiredCase = createCase(ORGANIZATION_A, physician, "appointment-session-expired");
+        IssuedInvitation expiredInvitation = issueInvitation(ORGANIZATION_A, expiredCase, physician);
+        String expiredSession = exchangedSessionToken(expiredInvitation.token());
+        jdbcTemplate.update(
+                "UPDATE patient_access_session SET expires_at = ? WHERE preparation_case_id = ?",
+                Instant.now().minusSeconds(1), expiredCase);
+
+        UUID revokedCase = createCase(ORGANIZATION_A, physician, "appointment-session-revoked");
+        IssuedInvitation revokedInvitation = issueInvitation(ORGANIZATION_A, revokedCase, physician);
+        String revokedSession = exchangedSessionToken(revokedInvitation.token());
+        revokeInvitation(ORGANIZATION_A, revokedCase, revokedInvitation.id(), physician)
+                .andExpect(status().isNoContent());
+
+        UUID terminalCase = createCase(ORGANIZATION_A, physician, "appointment-session-terminal");
+        IssuedInvitation terminalInvitation = issueInvitation(ORGANIZATION_A, terminalCase, physician);
+        String terminalSession = exchangedSessionToken(terminalInvitation.token());
+        jdbcTemplate.update(
+                "UPDATE preparation_case SET status = 'CANCELLED', updated_at = ? WHERE id = ?",
+                Instant.now(), terminalCase);
+
+        List<MvcResult> failures = List.of(
+                mockMvc.perform(get("/api/v1/patient-access/session")).andReturn(),
+                mockMvc.perform(get("/api/v1/patient-access/session")
+                        .cookie(sessionCookie("malformed"))).andReturn(),
+                mockMvc.perform(get("/api/v1/patient-access/session")
+                        .cookie(sessionCookie("Z".repeat(43)))).andReturn(),
+                mockMvc.perform(get("/api/v1/patient-access/session")
+                        .cookie(sessionCookie(expiredSession))).andReturn(),
+                mockMvc.perform(get("/api/v1/patient-access/session")
+                        .cookie(sessionCookie(revokedSession))).andReturn(),
+                mockMvc.perform(get("/api/v1/patient-access/session")
+                        .cookie(sessionCookie(terminalSession))).andReturn(),
+                mockMvc.perform(get("/api/v1/patient-access/session")
+                        .cookie(sessionCookie(terminalSession), sessionCookie("Y".repeat(43)))).andReturn());
+
+        assertThat(failures).allSatisfy(result -> {
+            assertThat(result.getResponse().getStatus()).isEqualTo(401);
+            assertThat(result.getResponse().getContentAsString()).isEqualTo("Session patient indisponible");
+            assertThat(result.getResponse().getHeader("Cache-Control")).contains("no-store");
+            assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE))
+                    .contains("tc_preparation_session=", "Max-Age=0", "SameSite=Strict");
+        });
+    }
+
+    @Test
+    void jwtRolesCannotAuthenticatePatientSessionRoutes() throws Exception {
+        UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-session-jwt");
+        IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
+        String sessionToken = exchangedSessionToken(invitation.token());
+
+        mockMvc.perform(get("/api/v1/patient-access/session")
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(physician)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/patient-access/session")
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(physician))
+                        .cookie(sessionCookie("Z".repeat(43))))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/patient-access/session")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer malformed")
+                        .cookie(sessionCookie(sessionToken)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void logoutRequiresSessionBoundCsrfAndDedicatedPatientOrigin() throws Exception {
+        UUID firstCase = createCase(ORGANIZATION_A, physician, "appointment-session-logout-a");
+        IssuedInvitation firstInvitation = issueInvitation(ORGANIZATION_A, firstCase, physician);
+        String firstSession = exchangedSessionToken(firstInvitation.token());
+        String firstCsrf = csrfFor(firstSession);
+
+        UUID secondCase = createCase(ORGANIZATION_A, physician, "appointment-session-logout-b");
+        IssuedInvitation secondInvitation = issueInvitation(ORGANIZATION_A, secondCase, physician);
+        String secondSession = exchangedSessionToken(secondInvitation.token());
+        String secondCsrf = csrfFor(secondSession);
+        assertThat(secondCsrf).isNotEqualTo(firstCsrf);
+
+        patientLogout(firstSession, null, "http://localhost:3000")
+                .andExpect(status().isForbidden());
+        patientLogout(firstSession, "Z".repeat(43), "http://localhost:3000")
+                .andExpect(status().isForbidden());
+        patientLogout(firstSession, secondCsrf, "http://localhost:3000")
+                .andExpect(status().isForbidden());
+        patientLogout(firstSession, firstCsrf, null)
+                .andExpect(status().isForbidden());
+        patientLogout(firstSession, firstCsrf, "http://localhost:5173")
+                .andExpect(status().isForbidden());
+
+        patientLogout(firstSession, firstCsrf, "http://localhost:3000")
+                .andExpect(status().isNoContent())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("tc_preparation_session="),
+                        org.hamcrest.Matchers.containsString("Max-Age=0"),
+                        org.hamcrest.Matchers.containsString("SameSite=Strict"))));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT revoked_at IS NOT NULL FROM patient_access_session WHERE preparation_case_id = ?",
+                Boolean.class,
+                firstCase)).isTrue();
+        mockMvc.perform(get("/api/v1/patient-access/session").cookie(sessionCookie(firstSession)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void unknownPatientRoutesRemainFailClosed() throws Exception {
+        UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-session-unknown-route");
+        IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
+        String sessionToken = exchangedSessionToken(invitation.token());
+
+        mockMvc.perform(get("/api/v1/patient-access/unknown").cookie(sessionCookie(sessionToken)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/patient-access/unknown")
+                        .cookie(sessionCookie(sessionToken))
+                        .header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .header(PatientCsrfTokenRepository.HEADER_NAME, csrfFor(sessionToken)))
+                .andExpect(status().isForbidden());
+    }
+
+    @RepeatedTest(3)
+    void concurrentPatientLogoutAndProfessionalRevocationRemainIdempotent() throws Exception {
+        UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-session-concurrent-logout");
+        IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
+        String sessionToken = exchangedSessionToken(invitation.token());
+        String csrfToken = csrfFor(sessionToken);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var patientLogout = executor.submit(() -> {
+                start.await();
+                return patientLogout(sessionToken, csrfToken, "http://localhost:3000")
+                        .andReturn().getResponse().getStatus();
+            });
+            var professionalRevoke = executor.submit(() -> {
+                start.await();
+                return revokeInvitation(ORGANIZATION_A, caseId, invitation.id(), physician)
+                        .andReturn().getResponse().getStatus();
+            });
+            start.countDown();
+
+            assertThat(List.of(patientLogout.get(), professionalRevoke.get()))
+                    .containsOnly(204);
+        }
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT revoked_at IS NOT NULL FROM patient_access_session WHERE preparation_case_id = ?",
+                Boolean.class,
+                caseId)).isTrue();
+    }
+
+    @Test
     void expiredRevokedConsumedAndRandomTokensHaveTheSamePublicFailure() throws Exception {
         UUID expiredCase = createCase(ORGANIZATION_A, physician, "appointment-expired");
         IssuedInvitation expired = issueInvitation(ORGANIZATION_A, expiredCase, physician);
@@ -287,6 +470,7 @@ class PatientInvitationApiSecurityIntegrationTest {
         rootLogger.addAppender(appender);
         String invitationToken;
         String sessionToken;
+        String csrfToken;
 
         try {
             UUID caseId = createCase(ORGANIZATION_A, physician, "appointment-log-safety");
@@ -294,6 +478,7 @@ class PatientInvitationApiSecurityIntegrationTest {
             invitationToken = invitation.token();
             MvcResult exchange = exchange(invitationToken).andExpect(status().isOk()).andReturn();
             sessionToken = cookieValue(exchange.getResponse().getHeader(HttpHeaders.SET_COOKIE));
+            csrfToken = csrfFor(sessionToken);
         } finally {
             rootLogger.detachAppender(appender);
             appender.stop();
@@ -301,7 +486,9 @@ class PatientInvitationApiSecurityIntegrationTest {
 
         assertThat(appender.list)
                 .extracting(ILoggingEvent::getFormattedMessage)
-                .noneMatch(message -> message.contains(invitationToken) || message.contains(sessionToken));
+                .noneMatch(message -> message.contains(invitationToken)
+                        || message.contains(sessionToken)
+                        || message.contains(csrfToken));
     }
 
     private UUID createCase(String organizationId, AppUtilisateur user, String appointmentReference) throws Exception {
@@ -344,6 +531,38 @@ class PatientInvitationApiSecurityIntegrationTest {
         return mockMvc.perform(post("/api/v1/patient-access/exchange")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"token\":\"%s\"}".formatted(token)));
+    }
+
+    private String exchangedSessionToken(String invitationToken) throws Exception {
+        MvcResult result = exchange(invitationToken).andExpect(status().isOk()).andReturn();
+        return cookieValue(result.getResponse().getHeader(HttpHeaders.SET_COOKIE));
+    }
+
+    private String csrfFor(String sessionToken) throws Exception {
+        return mockMvc.perform(get("/api/v1/patient-access/session")
+                        .cookie(sessionCookie(sessionToken)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getHeader(PatientCsrfTokenRepository.HEADER_NAME);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions patientLogout(
+            String sessionToken,
+            String csrfToken,
+            String origin) throws Exception {
+        var request = delete("/api/v1/patient-access/session").cookie(sessionCookie(sessionToken));
+        if (csrfToken != null) {
+            request.header(PatientCsrfTokenRepository.HEADER_NAME, csrfToken);
+        }
+        if (origin != null) {
+            request.header(HttpHeaders.ORIGIN, origin);
+        }
+        return mockMvc.perform(request);
+    }
+
+    private Cookie sessionCookie(String value) {
+        return new Cookie(PatientAccessController.SESSION_COOKIE, value);
     }
 
     private int exchangeStatusAfter(CountDownLatch start, String token) throws Exception {

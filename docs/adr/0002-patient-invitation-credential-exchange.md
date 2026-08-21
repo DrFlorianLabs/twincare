@@ -86,11 +86,9 @@ exclusive: an invitation is invalid when `now == expiresAt`.
 
 - No SMS, email, scheduling, cloud or model provider is required.
 - An invitation is not patient identity proof, consent or a longitudinal portal.
-- The session currently authorizes no patient mutation; all unimplemented
-  `/api/v1/patient-access/**` routes remain denied.
-- Before TC-004 introduces the first cookie-authenticated write, that boundary
-  must implement and test CSRF protection (token or strict origin verification
-  in addition to `SameSite`) and resolve the session to exactly one active case.
+- Session authentication, CSRF and logout are defined by
+  [`0003-patient-session-authentication-and-csrf.md`](0003-patient-session-authentication-and-csrf.md).
+- Every unimplemented `/api/v1/patient-access/**` route remains denied.
 - Formal protected audit access remains TC-007. The invitation/session tables
   already retain minimized technical issuer and lifecycle timestamps without
   patient reference, raw token or clinical content.
