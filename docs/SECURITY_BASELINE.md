@@ -45,6 +45,12 @@ For a patient:
 For staff:
 
 - access must be limited by role and, before real deployment, by organisation/tenant membership.
+- clinical access is a separate capability from tenant administration;
+- clinicians and active medical assistants may view preparation data;
+- organisation administrators have no clinical view by default;
+- attachment download, task management and readiness confirmation require
+  dedicated capabilities, with readiness confirmation reserved for clinicians.
+- professional preparation responses, including errors, must be `no-store`.
 
 An object identifier, storage filename or UUID is **not** an authorization mechanism.
 
@@ -103,7 +109,10 @@ Adapters must implement stable internal interfaces. Credentials live in environm
 
 ## 9. Multi-tenancy
 
-The current prototype does not yet establish a complete organisation/tenant authorization model. This is a **release blocker before multi-structure commercial deployment**.
+The active preparation endpoints scope membership and case queries by
+organisation. The historical prototype does not yet establish this boundary
+consistently, so complete tenant isolation remains a **release blocker before
+multi-structure commercial deployment**.
 
 Future access checks must include at minimum:
 
