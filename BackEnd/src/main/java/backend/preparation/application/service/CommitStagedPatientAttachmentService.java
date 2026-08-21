@@ -1,5 +1,6 @@
 package backend.preparation.application.service;
 
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
 import backend.preparation.application.InvalidPatientAttachmentException;
@@ -46,6 +47,7 @@ public final class CommitStagedPatientAttachmentService implements CommitStagedP
         }
 
         storageTransaction.promoteForCommit(staged);
+        var persistedAt = lockedScope.now().truncatedTo(ChronoUnit.MICROS);
         if (existing == null) {
             PreparationAttachment created = PreparationAttachment.uploadedByPatient(
                     idGenerator.nextId(),
@@ -56,7 +58,7 @@ public final class CommitStagedPatientAttachmentService implements CommitStagedP
                     staged.mediaType(),
                     staged.sizeBytes(),
                     staged.digest(),
-                    lockedScope.now());
+                    persistedAt);
             attachments.add(created);
             return result(created, true, true);
         }
@@ -69,7 +71,7 @@ public final class CommitStagedPatientAttachmentService implements CommitStagedP
                 staged.mediaType(),
                 staged.sizeBytes(),
                 staged.digest(),
-                lockedScope.now());
+                persistedAt);
         attachments.update(existing);
         return result(existing, false, true);
     }

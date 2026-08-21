@@ -8,8 +8,8 @@ CREATE TABLE preparation_attachment (
     size_bytes BIGINT NOT NULL,
     sha256_digest VARCHAR(64) NOT NULL,
     provenance VARCHAR(32) NOT NULL,
-    uploaded_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    uploaded_at TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP(6) WITH TIME ZONE NOT NULL,
     version BIGINT NOT NULL DEFAULT 0,
     CONSTRAINT fk_preparation_attachment_case_organization
         FOREIGN KEY (preparation_case_id, organization_id)

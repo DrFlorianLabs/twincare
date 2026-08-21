@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -48,7 +49,7 @@ import backend.preparation.domain.TokenDigest;
 
 class PatientAttachmentServicesTest {
 
-    private static final Instant NOW = Instant.parse("2026-08-21T10:00:00Z");
+    private static final Instant NOW = Instant.parse("2026-08-21T10:00:00.123456789Z");
     private static final OrganizationId ORGANIZATION_ID = new OrganizationId("synthetic-org");
     private static final PreparationCaseId CASE_ID = new PreparationCaseId(
             UUID.fromString("10000000-0000-0000-0000-000000000001"));
@@ -112,6 +113,17 @@ class PatientAttachmentServicesTest {
         verify(storageTransaction, never()).promoteForCommit(any());
         verify(storageTransaction, never()).deleteAfterCommit(any());
         verify(attachments, never()).update(any());
+    }
+
+    @Test
+    void newAttachmentUsesTheExplicitDatabaseTimestampPrecision() {
+        when(attachments.findByCaseForUpdate(CASE_ID, ORGANIZATION_ID)).thenReturn(Optional.empty());
+
+        var result = commitService().commit(
+                new CommitStagedPatientAttachmentCommand(grant, staged("synthetic.pdf", "a")));
+
+        assertThat(result.uploadedAt()).isEqualTo(NOW.truncatedTo(ChronoUnit.MICROS));
+        assertThat(result.updatedAt()).isEqualTo(NOW.truncatedTo(ChronoUnit.MICROS));
     }
 
     @Test
