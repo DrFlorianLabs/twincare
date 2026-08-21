@@ -91,5 +91,8 @@ until every applicable gate is closed.
 - `TC-004a` — completed: patient session authentication, CSRF and explicit logout ([PR #22](https://github.com/DrFlorianLabs/twincare-amont/pull/22)).
 - `TC-004b` — completed: patient free-text reason only; structured responses remain a separate slice ([PR #23](https://github.com/DrFlorianLabs/twincare-amont/pull/23)).
 - `TC-005` — delivered: secure optional patient attachment linked to a preparation case ([PR #24](https://github.com/DrFlorianLabs/twincare-amont/pull/24)).
-- `TC-006`: deterministic readiness, tasks and professional vignette.
+- `TC-006a` — in development: deterministic readiness and read-only professional views.
+- `TC-006b`: human preparation tasks and clinician readiness confirmation.
+- `TC-006c`: authenticated professional attachment download.
+- `TC-006d`: minimal professional worklist and preparation-view frontend.
 - `TC-007`: explicit closure and protected audit events.
