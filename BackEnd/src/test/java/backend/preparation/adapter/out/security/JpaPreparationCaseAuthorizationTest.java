@@ -1,0 +1,115 @@
+package backend.preparation.adapter.out.security;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.Collection;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
+import backend.entity.AppUtilisateur;
+import backend.entity.Role;
+import backend.exception.UnauthorizedActionException;
+import backend.preparation.application.port.out.PreparationCaseCapability;
+import backend.preparation.domain.OrganizationId;
+import backend.service.SecurityHelperService;
+
+class JpaPreparationCaseAuthorizationTest {
+
+    private static final OrganizationId ORGANIZATION_ID = new OrganizationId("synthetic-org");
+    private static final long USER_ID = 42L;
+
+    private SecurityHelperService securityHelperService;
+    private OrganizationMembershipJpaRepository membershipRepository;
+    private AppUtilisateur currentUser;
+    private JpaPreparationCaseAuthorization authorization;
+
+    @BeforeEach
+    void setUp() {
+        securityHelperService = mock(SecurityHelperService.class);
+        membershipRepository = mock(OrganizationMembershipJpaRepository.class);
+        currentUser = mock(AppUtilisateur.class);
+        when(currentUser.getId()).thenReturn(USER_ID);
+        when(securityHelperService.getCurrentUser()).thenReturn(currentUser);
+        authorization = new JpaPreparationCaseAuthorization(securityHelperService, membershipRepository);
+    }
+
+    @Test
+    void clinicianCanUseEveryDeclaredClinicalCapabilityWithAnActiveClinicianMembership() {
+        when(currentUser.getRole()).thenReturn(Role.MEDECIN);
+        when(membershipRepository.existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
+                eq(ORGANIZATION_ID.value()), eq(USER_ID), anyCollection()))
+                .thenReturn(true);
+
+        for (PreparationCaseCapability capability : PreparationCaseCapability.values()) {
+            assertThat(authorization.requireAccess(ORGANIZATION_ID, capability)).isEqualTo(USER_ID);
+        }
+    }
+
+    @Test
+    void medicalAssistantCannotConfirmReady() {
+        when(currentUser.getRole()).thenReturn(Role.ASSISTANT_MEDICAL);
+        when(membershipRepository.existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
+                eq(ORGANIZATION_ID.value()), eq(USER_ID), anyCollection()))
+                .thenReturn(true);
+
+        assertThat(authorization.requireAccess(
+                ORGANIZATION_ID,
+                PreparationCaseCapability.VIEW_PREPARATION)).isEqualTo(USER_ID);
+        assertThat(authorization.requireAccess(
+                ORGANIZATION_ID,
+                PreparationCaseCapability.MANAGE_PREPARATION_TASKS)).isEqualTo(USER_ID);
+        assertThat(authorization.requireAccess(
+                ORGANIZATION_ID,
+                PreparationCaseCapability.DOWNLOAD_ATTACHMENT)).isEqualTo(USER_ID);
+        assertThatThrownBy(() -> authorization.requireAccess(
+                ORGANIZATION_ID,
+                PreparationCaseCapability.CONFIRM_READY_FOR_CONSULTATION))
+                .isInstanceOf(UnauthorizedActionException.class);
+    }
+
+    @Test
+    void platformAdministratorNeverReceivesClinicalAccessByDefault() {
+        when(currentUser.getRole()).thenReturn(Role.ADMIN);
+
+        for (PreparationCaseCapability capability : PreparationCaseCapability.values()) {
+            assertThatThrownBy(() -> authorization.requireAccess(ORGANIZATION_ID, capability))
+                    .isInstanceOf(UnauthorizedActionException.class);
+        }
+        verify(membershipRepository, never())
+                .existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
+                        eq(ORGANIZATION_ID.value()), eq(USER_ID), anyCollection());
+    }
+
+    @Test
+    void viewMembershipRolesExcludeOrganizationAdministrators() {
+        when(currentUser.getRole()).thenReturn(Role.MEDECIN);
+        when(membershipRepository.existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
+                eq(ORGANIZATION_ID.value()), eq(USER_ID), anyCollection()))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> authorization.requireAccess(
+                ORGANIZATION_ID,
+                PreparationCaseCapability.VIEW_PREPARATION))
+                .isInstanceOf(UnauthorizedActionException.class);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Collection<OrganizationMembershipRole>> roles = ArgumentCaptor.forClass(Collection.class);
+        verify(membershipRepository).existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
+                eq(ORGANIZATION_ID.value()),
+                eq(USER_ID),
+                roles.capture());
+        assertThat(roles.getValue()).containsExactlyInAnyOrder(
+                OrganizationMembershipRole.CLINICIAN,
+                OrganizationMembershipRole.MEDICAL_ASSISTANT);
+        assertThat(roles.getValue()).doesNotContain(OrganizationMembershipRole.ORGANIZATION_ADMIN);
+    }
+}
