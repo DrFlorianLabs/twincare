@@ -218,6 +218,19 @@ It never lazily reopens a path that a concurrent replacement could move. The
 response is forced to download, uses only allowlisted MIME metadata, is
 `no-store`/`nosniff`, and exposes no key, digest or public URL.
 
+## 4.9 Professional context boundary
+
+The professional frontend discovers its active clinical organizations through
+`GET /api/v1/professional-context`. The server derives the actor and
+capabilities from the authenticated account plus active organization
+memberships; the request accepts no role, actor or organization input.
+
+The returned capabilities only control presentation. Every downstream use case
+repeats its own authorization before reading preparation data. Inactive and
+administrative-only memberships are omitted, and the response contains no
+patient or preparation data. See
+[`adr/0009-professional-context-discovery.md`](adr/0009-professional-context-discovery.md).
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:
