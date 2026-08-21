@@ -159,6 +159,25 @@ fails closed when metadata references missing bytes or cleanup cannot be
 completed. Multipart parser temporary files use a separate private directory;
 they never enter the historical upload root or Git.
 
+## 4.6 Deterministic readiness and professional read model
+
+The professional worklist and structured preparation view are defined in
+[`adr/0006-deterministic-readiness-and-professional-view.md`](adr/0006-deterministic-readiness-and-professional-view.md).
+Readiness is a pure, explicit and versioned policy. It does not interpret
+patient prose, infer clinical requirements or depend on an LLM. An optional
+attachment being absent is never itself a blocker.
+
+The professional vignette is assembled at read time from tenant-scoped data; it
+is not a stored narrative. The bounded list omits full patient free text and
+uses a joined projection to avoid N+1 document lookups. The detailed view
+returns the exact human-entered facts and safe attachment metadata with
+`Cache-Control: no-store`.
+
+Clinical access is capability-based. Active clinicians and medical assistants
+may view preparation data; organization administrators have no clinical access
+by default. Authorization happens before each query and every case lookup is
+scoped by both organization and case identifiers.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:
