@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import backend.entity.AppUtilisateur;
 import backend.entity.Role;
+import backend.dao.AppUtilisateurRepository;
 import backend.exception.UnauthorizedActionException;
 import backend.preparation.application.port.out.PreparationCaseAuthorization;
 import backend.preparation.application.port.out.PreparationCaseCapability;
@@ -26,12 +27,15 @@ public class JpaPreparationCaseAuthorization implements
 
     private final SecurityHelperService securityHelperService;
     private final OrganizationMembershipJpaRepository membershipRepository;
+    private final AppUtilisateurRepository userRepository;
 
     public JpaPreparationCaseAuthorization(
             SecurityHelperService securityHelperService,
-            OrganizationMembershipJpaRepository membershipRepository) {
+            OrganizationMembershipJpaRepository membershipRepository,
+            AppUtilisateurRepository userRepository) {
         this.securityHelperService = securityHelperService;
         this.membershipRepository = membershipRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -65,6 +69,25 @@ public class JpaPreparationCaseAuthorization implements
             throw new UnauthorizedActionException("Accès interdit à cette organisation");
         }
         return currentUser.getId();
+    }
+
+    @Override
+    public void requireAssignableStaff(OrganizationId organizationId, long userId) {
+        if (userId <= 0) {
+            throw new UnauthorizedActionException("Accès interdit à cette organisation");
+        }
+        Role platformRole = userRepository.findById(userId)
+                .map(AppUtilisateur::getRole)
+                .orElseThrow(() -> new UnauthorizedActionException("Accès interdit à cette organisation"));
+        if ((platformRole != Role.MEDECIN && platformRole != Role.ASSISTANT_MEDICAL)
+                || !membershipRepository.existsByOrganizationIdAndUserIdAndActiveTrueAndMembershipRoleIn(
+                        organizationId.value(),
+                        userId,
+                        EnumSet.of(
+                                OrganizationMembershipRole.CLINICIAN,
+                                OrganizationMembershipRole.MEDICAL_ASSISTANT))) {
+            throw new UnauthorizedActionException("Accès interdit à cette organisation");
+        }
     }
 
     private boolean isStaff(Role role) {

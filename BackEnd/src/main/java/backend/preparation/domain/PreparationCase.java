@@ -14,6 +14,7 @@ public final class PreparationCase {
     private final Optional<AppointmentReference> appointmentReference;
     private final Optional<Instant> scheduledAt;
     private final Instant createdAt;
+    private final long revision;
     private final List<PreparationCaseEvent> domainEvents = new ArrayList<>();
 
     private PreparationCaseStatus status;
@@ -30,6 +31,7 @@ public final class PreparationCase {
             PreparationCaseStatus status,
             Optional<PatientStatement> patientReason,
             Instant updatedAt,
+            long revision,
             boolean emitCreatedEvent) {
         this.id = Objects.requireNonNull(id, "Preparation case identifier is required");
         this.organizationId = Objects.requireNonNull(organizationId, "Organization identifier is required");
@@ -41,6 +43,10 @@ public final class PreparationCase {
         this.status = Objects.requireNonNull(status, "Preparation case status is required");
         this.patientReason = Objects.requireNonNull(patientReason, "Patient reason container is required");
         this.updatedAt = Objects.requireNonNull(updatedAt, "Update timestamp is required");
+        if (revision < 0) {
+            throw new IllegalArgumentException("Preparation case revision cannot be negative");
+        }
+        this.revision = revision;
         validateState();
         if (emitCreatedEvent) {
             domainEvents.add(new PreparationCaseCreated(id, organizationId, createdAt));
@@ -64,6 +70,7 @@ public final class PreparationCase {
                 PreparationCaseStatus.CREATED,
                 Optional.empty(),
                 createdAt,
+                0,
                 true);
     }
 
@@ -77,6 +84,30 @@ public final class PreparationCase {
             PreparationCaseStatus status,
             Optional<PatientStatement> patientReason,
             Instant updatedAt) {
+        return restore(
+                id,
+                organizationId,
+                patientReference,
+                appointmentReference,
+                scheduledAt,
+                createdAt,
+                status,
+                patientReason,
+                updatedAt,
+                0);
+    }
+
+    public static PreparationCase restore(
+            PreparationCaseId id,
+            OrganizationId organizationId,
+            PatientReference patientReference,
+            Optional<AppointmentReference> appointmentReference,
+            Optional<Instant> scheduledAt,
+            Instant createdAt,
+            PreparationCaseStatus status,
+            Optional<PatientStatement> patientReason,
+            Instant updatedAt,
+            long revision) {
         return new PreparationCase(
                 id,
                 organizationId,
@@ -87,6 +118,7 @@ public final class PreparationCase {
                 status,
                 patientReason,
                 updatedAt,
+                revision,
                 false);
     }
 
@@ -136,7 +168,7 @@ public final class PreparationCase {
         if (patientReason.map(existing -> existing.text().equals(statement.text())).orElse(false)) {
             return false;
         }
-        if (status != PreparationCaseStatus.COLLECTING) {
+        if (status == PreparationCaseStatus.PATIENT_STARTED) {
             transitionTo(PreparationCaseStatus.COLLECTING, occurredAt);
         }
         patientReason = Optional.of(statement);
@@ -170,6 +202,11 @@ public final class PreparationCase {
 
     public void cancel(Instant occurredAt) {
         transitionTo(PreparationCaseStatus.CANCELLED, occurredAt);
+    }
+
+    public void touchVisibleContent(Instant occurredAt) {
+        assertChronological(occurredAt);
+        updatedAt = occurredAt;
     }
 
     private void transitionTo(PreparationCaseStatus target, Instant occurredAt) {
@@ -233,5 +270,9 @@ public final class PreparationCase {
 
     public Instant updatedAt() {
         return updatedAt;
+    }
+
+    public long revision() {
+        return revision;
     }
 }

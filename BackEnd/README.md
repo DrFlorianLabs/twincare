@@ -101,9 +101,21 @@ optional attachment is not a blocker and no clinical meaning is inferred from
 patient prose. Active clinicians and medical assistants may view these data;
 organization administrators have no clinical access by default.
 
-TC-006a cannot emit `READY` because it deliberately has no persisted clinician
-confirmation. A stored ready status without confirmation evidence fails closed;
-TC-006b adds that evidence and its authorized transition.
+`POST .../tasks` creates an idempotent, human-entered preparation task and
+`PUT .../tasks/{taskId}/status` completes or cancels it. Active clinicians and
+medical assistants may manage tasks; the assignee must have active clinical
+membership in the same organization. The worklist exposes only the open count,
+while the detailed view includes at most 100 task labels. No task is inferred
+from patient prose or optional-document absence.
+
+`PUT .../ready-confirmation` is clinician-only. Its `expectedRevision` must
+match the revision shown in the professional view. Reason, task and attachment
+changes advance that revision, preventing confirmation of information the
+clinician did not review. The persisted evidence includes the server-derived
+actor, timestamp, reviewed revision and deterministic rule version. A stored
+ready status without matching confirmation evidence fails closed. The detailed
+view uses one repeatable-read database snapshot and rechecks the current reason
+timestamp, revision and open-task count before emitting `READY`.
 
 ## Database safety
 

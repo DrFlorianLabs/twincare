@@ -5,4 +5,6 @@ import backend.preparation.domain.OrganizationId;
 public interface ProfessionalPreparationAuthorization {
 
     long requireAccess(OrganizationId organizationId, PreparationCaseCapability capability);
+
+    void requireAssignableStaff(OrganizationId organizationId, long userId);
 }

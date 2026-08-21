@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.test.context.transaction.TestTransaction;
 
 import backend.preparation.domain.AppointmentReference;
 import backend.preparation.domain.OrganizationId;
@@ -69,5 +70,28 @@ class JpaPreparationCaseRepositoryAdapterTest {
 
         assertThat(adapter.findById(original.id(), new OrganizationId("cabinet-b"))).isEmpty();
         assertThat(adapter.findById(original.id(), ORGANIZATION_ID)).isPresent();
+    }
+
+    @Test
+    void everyExplicitCaseUpdateAdvancesTheReviewRevisionEvenAtTheSameTimestamp() {
+        JpaPreparationCaseRepositoryAdapter adapter = new JpaPreparationCaseRepositoryAdapter(springDataRepository);
+        PreparationCase original = PreparationCase.create(
+                new PreparationCaseId(UUID.randomUUID()),
+                ORGANIZATION_ID,
+                new PatientReference("patient-revision"),
+                Optional.of(new AppointmentReference("appointment-revision")),
+                Optional.empty(),
+                CREATED_AT);
+        adapter.add(original);
+        entityManager.clear();
+
+        PreparationCase locked = adapter.findByIdForUpdate(original.id(), ORGANIZATION_ID).orElseThrow();
+        locked.touchVisibleContent(CREATED_AT);
+        adapter.update(locked);
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+        TestTransaction.start();
+
+        assertThat(adapter.findById(original.id(), ORGANIZATION_ID).orElseThrow().revision()).isOne();
     }
 }

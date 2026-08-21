@@ -30,7 +30,8 @@ public enum PreparationCaseStatus {
             case READY_FOR_REVIEW -> target == NEEDS_ACTION
                     || target == READY_FOR_CONSULTATION
                     || target == CANCELLED;
-            case NEEDS_ACTION -> target == COLLECTING || target == CANCELLED;
+            case NEEDS_ACTION -> target == READY_FOR_REVIEW
+                    || target == CANCELLED;
             case READY_FOR_CONSULTATION -> target == CLOSED || target == CANCELLED;
             case CLOSED, EXPIRED, CANCELLED -> false;
         };

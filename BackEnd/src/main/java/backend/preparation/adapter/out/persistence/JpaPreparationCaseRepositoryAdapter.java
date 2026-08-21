@@ -51,8 +51,16 @@ public class JpaPreparationCaseRepositoryAdapter implements PreparationCaseRepos
                         preparationCase.id().value(),
                         preparationCase.organizationId().value())
                 .orElseThrow(() -> new IllegalStateException("Preparation case disappeared during update"));
+        long previousVersion = managed.version();
         managed.updateFrom(mapper.toEntity(preparationCase));
         repository.saveAndFlush(managed);
+        if (managed.version() == previousVersion
+                && repository.forceIncrementVersion(
+                        preparationCase.id().value(),
+                        preparationCase.organizationId().value(),
+                        previousVersion) != 1) {
+            throw new IllegalStateException("Preparation case revision could not be advanced");
+        }
     }
 
     @Override

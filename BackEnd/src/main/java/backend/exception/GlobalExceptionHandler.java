@@ -15,6 +15,8 @@ import backend.preparation.application.PatientInvitationConflictException;
 import backend.preparation.application.PatientInvitationUnavailableException;
 import backend.preparation.application.PreparationCaseConflictException;
 import backend.preparation.application.PreparationCaseNotFoundException;
+import backend.preparation.application.PreparationTaskNotFoundException;
+import backend.preparation.application.PreparationWorkflowConflictException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -69,6 +71,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<String> handlePreparationCaseNotFound(PreparationCaseNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body("Préparation introuvable");
+    }
+
+    @ExceptionHandler(PreparationTaskNotFoundException.class)
+    public ResponseEntity<String> handlePreparationTaskNotFound(PreparationTaskNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body("Tâche de préparation introuvable");
+    }
+
+    @ExceptionHandler(PreparationWorkflowConflictException.class)
+    public ResponseEntity<String> handlePreparationWorkflowConflict(PreparationWorkflowConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body("La préparation a changé ou cette action n'est plus disponible");
     }
 
     @ExceptionHandler(PatientInvitationConflictException.class)

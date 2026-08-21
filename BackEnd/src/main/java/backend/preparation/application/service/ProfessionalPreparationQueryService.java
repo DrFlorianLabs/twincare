@@ -1,6 +1,8 @@
 package backend.preparation.application.service;
 
+import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 import backend.preparation.application.PreparationCaseNotFoundException;
 import backend.preparation.application.port.in.GetProfessionalPreparationViewCommand;
@@ -11,17 +13,19 @@ import backend.preparation.application.port.in.ProfessionalAttachmentResult;
 import backend.preparation.application.port.in.ProfessionalPreparationListItemResult;
 import backend.preparation.application.port.in.ProfessionalPreparationPageResult;
 import backend.preparation.application.port.in.ProfessionalPreparationViewResult;
+import backend.preparation.application.port.in.ProfessionalReadyConfirmationResult;
+import backend.preparation.application.port.in.PreparationTaskResult;
 import backend.preparation.application.port.out.PreparationCaseCapability;
 import backend.preparation.application.port.out.ProfessionalPreparationAuthorization;
 import backend.preparation.application.port.out.ProfessionalPreparationQueryRepository;
+import backend.preparation.application.port.out.ProfessionalReadyConfirmationSnapshot;
+import backend.preparation.domain.PreparationCaseStatus;
+import backend.preparation.domain.PreparationReadinessAssessment;
 import backend.preparation.domain.PreparationReadinessPolicy;
 
 public final class ProfessionalPreparationQueryService implements
         ListProfessionalPreparationsUseCase,
         GetProfessionalPreparationViewUseCase {
-
-    private static final int NO_OPEN_TASKS = 0;
-    private static final boolean NO_READY_CONFIRMATION_EVIDENCE = false;
 
     private final ProfessionalPreparationAuthorization authorization;
     private final ProfessionalPreparationQueryRepository repository;
@@ -48,13 +52,16 @@ public final class ProfessionalPreparationQueryService implements
                         snapshot.appointmentReference(),
                         snapshot.scheduledAt(),
                         snapshot.caseStatus(),
-                        readinessPolicy.assessCurrent(
+                        assess(
                                 snapshot.caseStatus(),
                                 snapshot.patientReasonPresent(),
-                                NO_OPEN_TASKS,
-                                NO_READY_CONFIRMATION_EVIDENCE),
-                        NO_OPEN_TASKS,
+                                snapshot.patientReasonRecordedAt(),
+                                snapshot.openTaskCount(),
+                                snapshot.readyConfirmation(),
+                                snapshot.revision()),
+                        snapshot.openTaskCount(),
                         snapshot.attachmentPresent(),
+                        snapshot.revision(),
                         snapshot.updatedAt()))
                 .toList();
         return new ProfessionalPreparationPageResult(
@@ -71,17 +78,37 @@ public final class ProfessionalPreparationQueryService implements
         authorization.requireAccess(command.organizationId(), PreparationCaseCapability.VIEW_PREPARATION);
         var snapshot = repository.findView(command.organizationId(), command.caseId())
                 .orElseThrow(PreparationCaseNotFoundException::new);
-        var readiness = readinessPolicy.assessCurrent(
+        var readiness = assess(
                 snapshot.caseStatus(),
                 snapshot.patientReason().isPresent(),
-                NO_OPEN_TASKS,
-                NO_READY_CONFIRMATION_EVIDENCE);
+                snapshot.patientReason().map(value -> value.recordedAt()),
+                snapshot.openTaskCount(),
+                snapshot.readyConfirmation(),
+                snapshot.revision());
         var attachment = snapshot.attachment().map(value -> new ProfessionalAttachmentResult(
                 value.displayFilename(),
                 value.mediaType(),
                 value.sizeBytes(),
                 value.uploadedAt(),
                 value.updatedAt()));
+        var taskResults = snapshot.tasks().stream()
+                .map(task -> new PreparationTaskResult(
+                        task.id(),
+                        task.description(),
+                        task.assigneeUserId(),
+                        task.status(),
+                        task.createdByUserId(),
+                        task.createdAt(),
+                        task.closedByUserId(),
+                        task.closedAt(),
+                        task.updatedAt()))
+                .toList();
+        var confirmation = snapshot.readyConfirmation().map(value -> new ProfessionalReadyConfirmationResult(
+                value.confirmedByUserId(),
+                value.confirmedAt(),
+                value.ruleSetId(),
+                value.ruleSetVersion(),
+                value.reviewedCaseRevision()));
         return new ProfessionalPreparationViewResult(
                 snapshot.caseId(),
                 snapshot.patientReference(),
@@ -91,9 +118,48 @@ public final class ProfessionalPreparationQueryService implements
                 readiness,
                 snapshot.patientReason(),
                 attachment,
-                NO_OPEN_TASKS,
+                taskResults,
+                confirmation,
+                snapshot.openTaskCount(),
+                snapshot.revision(),
                 snapshot.createdAt(),
                 snapshot.updatedAt());
+    }
+
+    private PreparationReadinessAssessment assess(
+            PreparationCaseStatus caseStatus,
+            boolean patientReasonPresent,
+            Optional<Instant> patientReasonRecordedAt,
+            int openTaskCount,
+            Optional<ProfessionalReadyConfirmationSnapshot> confirmation,
+            long caseRevision) {
+        return confirmation
+                .map(value -> {
+                    boolean synchronizedEvidence = openTaskCount == 0
+                            && value.openTaskCount() == 0
+                            && patientReasonPresent
+                            && patientReasonRecordedAt
+                                    .filter(value.reviewedReasonRecordedAt()::equals)
+                                    .isPresent()
+                            && !value.confirmedAt().isBefore(value.reviewedReasonRecordedAt())
+                            && caseRevision > 0
+                            && value.reviewedCaseRevision() == caseRevision - 1;
+                    if (!synchronizedEvidence) {
+                        throw new IllegalStateException("Readiness confirmation evidence is inconsistent");
+                    }
+                    return readinessPolicy.assess(
+                            value.ruleSetId(),
+                            value.ruleSetVersion(),
+                            caseStatus,
+                            patientReasonPresent,
+                            openTaskCount,
+                            true);
+                })
+                .orElseGet(() -> readinessPolicy.assessCurrent(
+                        caseStatus,
+                        patientReasonPresent,
+                        openTaskCount,
+                        false));
     }
 
 }

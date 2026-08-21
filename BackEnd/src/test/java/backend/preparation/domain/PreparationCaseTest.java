@@ -71,14 +71,14 @@ class PreparationCaseTest {
     }
 
     @Test
-    void routesAReviewBackToCollectionWhenActionIsNeeded() {
+    void preservesNeedsActionWhenThePatientUpdatesTheReason() {
         PreparationCase preparationCase = collectingCase();
         preparationCase.markReadyForReview(atMinute(3));
         preparationCase.markNeedsAction(atMinute(4));
 
         preparationCase.recordPatientReason("Texte patient complété", atMinute(5));
 
-        assertThat(preparationCase.status()).isEqualTo(PreparationCaseStatus.COLLECTING);
+        assertThat(preparationCase.status()).isEqualTo(PreparationCaseStatus.NEEDS_ACTION);
         assertThat(preparationCase.patientReason()).get()
                 .extracting(PatientStatement::text)
                 .isEqualTo("Texte patient complété");
@@ -221,22 +221,23 @@ class PreparationCaseTest {
     }
 
     @Test
-    void doesNotAllowNeedsActionToBeClearedWithoutNewInput() {
+    void allowsTheApplicationToReturnToReviewAfterTheLastTaskIsResolved() {
         PreparationCase preparationCase = collectingCase();
         preparationCase.markReadyForReview(atMinute(3));
         preparationCase.markNeedsAction(atMinute(4));
         preparationCase.releaseDomainEvents();
 
-        assertThatThrownBy(() -> preparationCase.markReadyForReview(atMinute(5)))
-                .isInstanceOf(InvalidPreparationCaseTransitionException.class)
-                .hasMessageContaining("NEEDS_ACTION -> READY_FOR_REVIEW");
-        assertThat(preparationCase.status()).isEqualTo(PreparationCaseStatus.NEEDS_ACTION);
-        assertThat(preparationCase.updatedAt()).isEqualTo(atMinute(4));
-        assertThat(preparationCase.releaseDomainEvents()).isEmpty();
+        preparationCase.markReadyForReview(atMinute(5));
 
-        preparationCase.recordPatientReason("Information demandée ajoutée", atMinute(5));
-        preparationCase.markReadyForReview(atMinute(6));
         assertThat(preparationCase.status()).isEqualTo(PreparationCaseStatus.READY_FOR_REVIEW);
+        assertThat(preparationCase.updatedAt()).isEqualTo(atMinute(5));
+        assertThat(preparationCase.releaseDomainEvents()).containsExactly(
+                new PreparationCaseStatusChanged(
+                        preparationCase.id(),
+                        preparationCase.organizationId(),
+                        PreparationCaseStatus.NEEDS_ACTION,
+                        PreparationCaseStatus.READY_FOR_REVIEW,
+                        atMinute(5)));
     }
 
     @Test
@@ -325,7 +326,7 @@ class PreparationCaseTest {
                 PreparationCaseStatus.READY_FOR_CONSULTATION,
                 PreparationCaseStatus.CANCELLED));
         expected.put(PreparationCaseStatus.NEEDS_ACTION, EnumSet.of(
-                PreparationCaseStatus.COLLECTING,
+                PreparationCaseStatus.READY_FOR_REVIEW,
                 PreparationCaseStatus.CANCELLED));
         expected.put(PreparationCaseStatus.READY_FOR_CONSULTATION, EnumSet.of(
                 PreparationCaseStatus.CLOSED,

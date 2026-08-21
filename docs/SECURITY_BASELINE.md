@@ -50,6 +50,12 @@ For staff:
 - organisation administrators have no clinical view by default;
 - attachment download, task management and readiness confirmation require
   dedicated capabilities, with readiness confirmation reserved for clinicians.
+- task assignees and actors must be resolved against active clinical membership
+  in the same organisation; client-supplied actor identities are ignored.
+- ready confirmation must bind to the case revision actually reviewed and fail
+  on any intervening reason, task or attachment change.
+- ready evidence must be revalidated on every read, and multi-query clinical
+  views must use one consistent database snapshot.
 - professional preparation responses, including errors, must be `no-store`.
 
 An object identifier, storage filename or UUID is **not** an authorization mechanism.
@@ -86,6 +92,7 @@ Do not log:
 - original document filenames;
 - document contents;
 - clinical summaries;
+- preparation task labels;
 - scores linked to patient identity;
 - JWTs or secrets.
 

@@ -19,6 +19,22 @@ interface ProfessionalPreparationViewProjection {
 
     PreparationCaseStatus getCaseStatus();
 
+    Long getOpenTaskCount();
+
+    Long getConfirmedByUserId();
+
+    Instant getConfirmedAt();
+
+    String getConfirmationRuleSetId();
+
+    Integer getConfirmationRuleSetVersion();
+
+    Long getReviewedCaseRevision();
+
+    Instant getReviewedReasonRecordedAt();
+
+    Integer getConfirmationOpenTaskCount();
+
     String getPatientReason();
 
     ProvenanceType getPatientReasonProvenance();
@@ -38,6 +54,8 @@ interface ProfessionalPreparationViewProjection {
     Instant getAttachmentUpdatedAt();
 
     Instant getCreatedAt();
+
+    Long getRevision();
 
     Instant getUpdatedAt();
 }

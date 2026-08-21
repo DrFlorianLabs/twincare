@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import backend.preparation.application.PatientSessionUnavailableException;
 import backend.preparation.application.port.in.CommitStagedPatientAttachmentCommand;
+import backend.preparation.application.port.in.DeletePatientAttachmentCommand;
 import backend.preparation.application.port.in.PatientAccessGrant;
 import backend.preparation.application.port.out.AttachmentIdGenerator;
 import backend.preparation.application.port.out.AttachmentStorageTransaction;
@@ -113,6 +114,7 @@ class PatientAttachmentServicesTest {
         verify(storageTransaction, never()).promoteForCommit(any());
         verify(storageTransaction, never()).deleteAfterCommit(any());
         verify(attachments, never()).update(any());
+        verify(cases, never()).update(any());
     }
 
     @Test
@@ -124,6 +126,7 @@ class PatientAttachmentServicesTest {
 
         assertThat(result.uploadedAt()).isEqualTo(NOW.truncatedTo(ChronoUnit.MICROS));
         assertThat(result.updatedAt()).isEqualTo(NOW.truncatedTo(ChronoUnit.MICROS));
+        verify(cases).update(preparationCase);
     }
 
     @Test
@@ -142,6 +145,23 @@ class PatientAttachmentServicesTest {
         ordered.verify(storageTransaction).promoteForCommit(replacement);
         ordered.verify(storageTransaction).deleteAfterCommit(previousKey);
         ordered.verify(attachments).update(existing);
+        verify(cases).update(preparationCase);
+    }
+
+    @Test
+    void deletionTouchesTheCaseOnlyWhenVisibleContentWasRemoved() {
+        PreparationAttachment existing = existingAttachment();
+        when(attachments.findByCaseForUpdate(CASE_ID, ORGANIZATION_ID))
+                .thenReturn(Optional.of(existing), Optional.empty());
+        DeletePatientAttachmentService service = new DeletePatientAttachmentService(
+                scopeLock(), attachments, storageTransaction);
+
+        service.delete(new DeletePatientAttachmentCommand(grant));
+        service.delete(new DeletePatientAttachmentCommand(grant));
+
+        verify(storageTransaction).deleteAfterCommit(existing.storageKey());
+        verify(attachments).delete(existing);
+        verify(cases).update(preparationCase);
     }
 
     @Test

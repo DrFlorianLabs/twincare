@@ -1,5 +1,6 @@
 package backend.preparation.adapter.config;
 
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import backend.preparation.application.port.in.GetProfessionalPreparationViewCommand;
@@ -30,7 +31,7 @@ public class TransactionalProfessionalPreparationQueries implements
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public ProfessionalPreparationViewResult get(GetProfessionalPreparationViewCommand command) {
         return viewDelegate.get(command);
     }

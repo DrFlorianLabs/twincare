@@ -19,7 +19,27 @@ interface ProfessionalPreparationListProjection {
 
     Boolean getPatientReasonPresent();
 
+    Instant getPatientReasonRecordedAt();
+
+    Long getOpenTaskCount();
+
+    Long getConfirmedByUserId();
+
+    Instant getConfirmedAt();
+
+    String getConfirmationRuleSetId();
+
+    Integer getConfirmationRuleSetVersion();
+
+    Long getReviewedCaseRevision();
+
+    Instant getReviewedReasonRecordedAt();
+
+    Integer getConfirmationOpenTaskCount();
+
     Boolean getAttachmentPresent();
+
+    Long getRevision();
 
     Instant getUpdatedAt();
 }
