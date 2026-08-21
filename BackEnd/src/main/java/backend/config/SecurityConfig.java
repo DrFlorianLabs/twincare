@@ -32,6 +32,7 @@ import backend.preparation.adapter.in.web.PatientMutationOriginFilter;
 import backend.preparation.adapter.in.web.PatientPreparationPrincipal;
 import backend.preparation.adapter.in.web.PatientSecurityResponses;
 import backend.preparation.adapter.in.web.PatientSessionAuthenticationFilter;
+import backend.preparation.adapter.in.web.ProfessionalPreparationNoStoreFilter;
 import backend.service.CustomUserDetailsService;
 
 @Configuration
@@ -130,7 +131,9 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
-    public SecurityFilterChain staffFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain staffFilterChain(
+            HttpSecurity http,
+            ProfessionalPreparationNoStoreFilter professionalPreparationNoStoreFilter) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -175,6 +178,11 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.POST, "/api/v1/organizations/*/preparation-cases")
                         .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/organizations/*/preparation-cases")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/organizations/*/preparation-cases/*/preparation-view")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/organizations/*/preparation-cases/*/invitations")
                         .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
@@ -195,6 +203,7 @@ public class SecurityConfig {
                 .userDetailsService(userService);
 
         http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(professionalPreparationNoStoreFilter, JwtAuthenticationFilter.class);
         return http.build();
     }
 
@@ -228,6 +237,15 @@ public class SecurityConfig {
     FilterRegistrationBean<PatientAttachmentUploadConcurrencyFilter> disablePatientUploadFilterAutoRegistration(
             PatientAttachmentUploadConcurrencyFilter filter) {
         FilterRegistrationBean<PatientAttachmentUploadConcurrencyFilter> registration =
+                new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    FilterRegistrationBean<ProfessionalPreparationNoStoreFilter> disableProfessionalPreparationNoStoreAutoRegistration(
+            ProfessionalPreparationNoStoreFilter filter) {
+        FilterRegistrationBean<ProfessionalPreparationNoStoreFilter> registration =
                 new FilterRegistrationBean<>(filter);
         registration.setEnabled(false);
         return registration;
