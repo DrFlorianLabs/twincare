@@ -22,6 +22,8 @@ import backend.preparation.application.port.out.PreparationCaseIdGenerator;
 import backend.preparation.application.port.out.PreparationCaseRepository;
 import backend.preparation.application.port.out.PreparationAttachmentRepository;
 import backend.preparation.application.port.out.PrivateAttachmentStorage;
+import backend.preparation.application.port.out.ProfessionalPreparationQueryRepository;
+import backend.preparation.application.port.out.ProfessionalPreparationAuthorization;
 import backend.preparation.application.port.out.SecureTokenDigester;
 import backend.preparation.application.port.out.SecureTokenGenerator;
 import backend.preparation.application.service.CreatePreparationCaseService;
@@ -33,9 +35,11 @@ import backend.preparation.application.service.GetPatientAttachmentService;
 import backend.preparation.application.service.IssuePatientInvitationService;
 import backend.preparation.application.service.RecordPatientReasonService;
 import backend.preparation.application.service.PatientAttachmentScopeLock;
+import backend.preparation.application.service.ProfessionalPreparationQueryService;
 import backend.preparation.application.service.PutPatientAttachmentCoordinator;
 import backend.preparation.application.service.RevokePatientInvitationService;
 import backend.preparation.application.service.ResolvePatientAccessSessionService;
+import backend.preparation.domain.PreparationReadinessPolicy;
 
 @Configuration
 public class PreparationApplicationConfiguration {
@@ -147,5 +151,16 @@ public class PreparationApplicationConfiguration {
             PrivateAttachmentStorage storage,
             TransactionalPatientAttachmentUseCases transactionalUseCases) {
         return new PutPatientAttachmentCoordinator(storage, transactionalUseCases);
+    }
+
+    @Bean
+    TransactionalProfessionalPreparationQueries professionalPreparationQueries(
+            ProfessionalPreparationAuthorization authorization,
+            ProfessionalPreparationQueryRepository repository) {
+        var service = new ProfessionalPreparationQueryService(
+                authorization,
+                repository,
+                new PreparationReadinessPolicy());
+        return new TransactionalProfessionalPreparationQueries(service, service);
     }
 }
