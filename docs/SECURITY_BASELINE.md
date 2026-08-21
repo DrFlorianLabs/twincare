@@ -169,3 +169,18 @@ baselined at version 4 only after their structure and backups have been verified
 Startup also fails closed if a schema-history version older than V3 coexists
 with legacy application tables; that state requires an explicit, backed-up
 migration decision rather than an automatic destructive replay.
+
+## 12. Professional browser client
+
+The current legacy JWT login cannot yet issue an `HttpOnly` professional
+session cookie. The V0.1 professional client therefore keeps the JWT in
+`sessionStorage`, never `localStorage`, and removes historical prototype keys
+on login/logout. This limits persistence but does not remove the impact of an
+XSS; strict content-security policy and a server-managed cookie session remain
+deployment work before real patient use.
+
+Clinical API responses are rendered only through Vue text interpolation. The
+client contains no `v-html`, analytics, service worker or clinical-data cache.
+Patient reason, task labels, attachment names and read models stay in memory
+only and are discarded on logout, authorization loss or page close. Unknown
+readiness/blocker values fail closed and never enable a command.

@@ -1,6 +1,7 @@
 import axios from 'axios'
 
-const configuredBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim()
+const configuredBaseUrl = (import.meta.env?.VITE_API_BASE_URL || '').trim()
+const SESSION_TOKEN_KEY = 'twincare.professional-token'
 
 const api = axios.create({
   baseURL: configuredBaseUrl.replace(/\/$/, ''),
@@ -10,46 +11,54 @@ const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
+  const token = professionalToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
 })
 
-export async function openProtectedDocument(documentId) {
-  if (!Number.isInteger(Number(documentId))) {
-    throw new Error('Invalid document identifier')
-  }
-
-  const previewWindow = window.open('', '_blank')
-  if (previewWindow) {
-    previewWindow.opener = null
-  }
-
+function browserStorage(name = 'sessionStorage') {
+  if (typeof window === 'undefined') return null
   try {
-    const response = await api.get(`/api/documents/${documentId}/content`, {
-      responseType: 'blob',
-      headers: { Accept: 'application/pdf,image/jpeg,image/png' }
-    })
+    return window[name]
+  } catch {
+    return null
+  }
+}
 
-    const objectUrl = URL.createObjectURL(response.data)
-    if (previewWindow) {
-      previewWindow.location.replace(objectUrl)
-    } else {
-      const link = document.createElement('a')
-      link.href = objectUrl
-      link.target = '_blank'
-      link.rel = 'noopener noreferrer'
-      link.click()
-    }
+export function professionalToken(storage = browserStorage()) {
+  try {
+    return storage?.getItem(SESSION_TOKEN_KEY) || ''
+  } catch {
+    return ''
+  }
+}
 
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
-  } catch (error) {
-    if (previewWindow && !previewWindow.closed) {
-      previewWindow.close()
-    }
-    throw error
+export function storeProfessionalSession(token, storage = browserStorage()) {
+  if (typeof token !== 'string' || !token.trim()) {
+    throw new Error('Authentication token is unavailable')
+  }
+  if (!storage) throw new Error('Browser session storage is unavailable')
+  storage.setItem(SESSION_TOKEN_KEY, token)
+}
+
+export function clearProfessionalSession(
+  storage = browserStorage(),
+  legacyStorage = browserStorage('localStorage')
+) {
+  try {
+    storage?.removeItem(SESSION_TOKEN_KEY)
+  } catch {
+    // A blocked storage API is equivalent to an already-cleared session.
+  }
+  try {
+    // Remove historical prototype keys without ever reusing their client-side identity.
+    legacyStorage?.removeItem('token')
+    legacyStorage?.removeItem('role')
+    legacyStorage?.removeItem('userId')
+  } catch {
+    // Historical storage is never required by the active application.
   }
 }
 

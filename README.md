@@ -53,6 +53,7 @@ Le suivi longitudinal des maladies chroniques reste un horizon produit ultérieu
 - [`docs/adr/0007-human-preparation-tasks-and-ready-confirmation.md`](docs/adr/0007-human-preparation-tasks-and-ready-confirmation.md) — tâches humaines et confirmation médicale liée à la version effectivement relue.
 - [`docs/adr/0008-professional-attachment-download.md`](docs/adr/0008-professional-attachment-download.md) — téléchargement professionnel authentifié, vérifié et borné.
 - [`docs/adr/0009-professional-context-discovery.md`](docs/adr/0009-professional-context-discovery.md) — découverte serveur des organisations et capacités cliniques du professionnel.
+- [`docs/adr/0010-professional-preparation-workspace.md`](docs/adr/0010-professional-preparation-workspace.md) — espace professionnel minimal, sans persistance locale de contenu clinique.
 
 Les prototypes, captures et documents historiques présents dans `artifacts/` documentent l'origine du projet mais ne constituent pas la spécification fonctionnelle courante.
 

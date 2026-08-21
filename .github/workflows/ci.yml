@@ -53,5 +53,8 @@ jobs:
         run: npm ci
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
+      - name: Unit tests
+        if: matrix.app == 'back-office'
+        run: npm run test:unit
       - name: Build
         run: npm run build

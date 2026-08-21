@@ -1,20 +1,33 @@
 import { createApp } from 'vue'
 import App from './App.vue'
-import router from './router' // Import du routeur
+import router from './router'
 
-// Configuration de Vuetify
 import 'vuetify/styles'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
-import '@mdi/font/css/materialdesignicons.css' // Les icônes
+import '@mdi/font/css/materialdesignicons.css'
 
 const vuetify = createVuetify({
   components,
   directives,
+  theme: {
+    defaultTheme: 'twincare',
+    themes: {
+      twincare: {
+        dark: false,
+        colors: {
+          primary: '#165C4A',
+          secondary: '#42675E',
+          surface: '#FFFFFF',
+          background: '#F4F7F5',
+          error: '#B3261E',
+          warning: '#8A5800',
+          success: '#2E6B45'
+        }
+      }
+    }
+  }
 })
 
-const app = createApp(App)
-app.use(router)  // Activation du routeur
-app.use(vuetify) // Activation de Vuetify
-app.mount('#app')
+createApp(App).use(router).use(vuetify).mount('#app')
