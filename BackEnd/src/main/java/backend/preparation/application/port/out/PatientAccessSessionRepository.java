@@ -16,6 +16,12 @@ public interface PatientAccessSessionRepository {
 
     Optional<PatientAccessSessionScope> findScopeByTokenDigest(TokenDigest tokenDigest);
 
+    Optional<PatientAccessSessionScope> findScopeByIdentity(
+            UUID id,
+            PatientInvitationId invitationId,
+            PreparationCaseId preparationCaseId,
+            OrganizationId organizationId);
+
     Optional<PatientAccessSession> findByIdForUpdate(
             UUID id,
             PatientInvitationId invitationId,

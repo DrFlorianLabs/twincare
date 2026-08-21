@@ -31,17 +31,21 @@ public class JpaPatientAccessSessionRepositoryAdapter implements PatientAccessSe
     @Override
     public Optional<PatientAccessSessionScope> findScopeByTokenDigest(TokenDigest tokenDigest) {
         return repository.findScopeByTokenDigest(tokenDigest.keyId(), tokenDigest.value())
-                .map(view -> new PatientAccessSessionScope(
-                        view.getSessionId(),
-                        new PatientInvitationId(view.getInvitationId()),
-                        new OrganizationId(view.getOrganizationId()),
-                        new PreparationCaseId(view.getPreparationCaseId()),
-                        view.getScope(),
-                        view.getInvitationStatus(),
-                        view.getPreparationCaseStatus(),
-                        view.getIssuedAt(),
-                        view.getExpiresAt(),
-                        Optional.ofNullable(view.getRevokedAt())));
+                .map(this::toScope);
+    }
+
+    @Override
+    public Optional<PatientAccessSessionScope> findScopeByIdentity(
+            UUID id,
+            PatientInvitationId invitationId,
+            PreparationCaseId preparationCaseId,
+            OrganizationId organizationId) {
+        return repository.findScopeByIdentity(
+                        id,
+                        invitationId.value(),
+                        preparationCaseId.value(),
+                        organizationId.value())
+                .map(this::toScope);
     }
 
     @Override
@@ -78,5 +82,20 @@ public class JpaPatientAccessSessionRepositoryAdapter implements PatientAccessSe
             entity.revoke(occurredAt);
             repository.saveAndFlush(entity);
         });
+    }
+
+    private PatientAccessSessionScope toScope(
+            SpringDataPatientAccessSessionRepository.PatientAccessSessionScopeView view) {
+        return new PatientAccessSessionScope(
+                view.getSessionId(),
+                new PatientInvitationId(view.getInvitationId()),
+                new OrganizationId(view.getOrganizationId()),
+                new PreparationCaseId(view.getPreparationCaseId()),
+                view.getScope(),
+                view.getInvitationStatus(),
+                view.getPreparationCaseStatus(),
+                view.getIssuedAt(),
+                view.getExpiresAt(),
+                Optional.ofNullable(view.getRevokedAt()));
     }
 }

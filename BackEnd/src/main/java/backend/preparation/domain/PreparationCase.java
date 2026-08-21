@@ -124,7 +124,7 @@ public final class PreparationCase {
         transitionTo(PreparationCaseStatus.PATIENT_STARTED, occurredAt);
     }
 
-    public void recordPatientReason(String reason, Instant occurredAt) {
+    public boolean recordPatientReason(String reason, Instant occurredAt) {
         assertChronological(occurredAt);
         if (status != PreparationCaseStatus.PATIENT_STARTED
                 && status != PreparationCaseStatus.COLLECTING
@@ -133,12 +133,16 @@ public final class PreparationCase {
         }
 
         PatientStatement statement = PatientStatement.declaredByPatient(reason, occurredAt);
+        if (patientReason.map(existing -> existing.text().equals(statement.text())).orElse(false)) {
+            return false;
+        }
         if (status != PreparationCaseStatus.COLLECTING) {
             transitionTo(PreparationCaseStatus.COLLECTING, occurredAt);
         }
         patientReason = Optional.of(statement);
         updatedAt = occurredAt;
         domainEvents.add(new PatientReasonRecorded(id, organizationId, statement.provenance(), occurredAt));
+        return true;
     }
 
     public void markReadyForReview(Instant occurredAt) {

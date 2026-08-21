@@ -89,7 +89,7 @@ until every applicable gate is closed.
 - `TC-002` — completed: manual professional creation, persistence and authorization ([PR #20](https://github.com/DrFlorianLabs/twincare-amont/pull/20)).
 - `TC-003` — completed: secure patient invitation lifecycle and scoped patient session bootstrap ([PR #21](https://github.com/DrFlorianLabs/twincare-amont/pull/21)).
 - `TC-004a` — completed: patient session authentication, CSRF and explicit logout ([PR #22](https://github.com/DrFlorianLabs/twincare-amont/pull/22)).
-- `TC-004b`: patient free-text reason and minimal structured responses.
+- `TC-004b` — completed: patient free-text reason only; structured responses remain a separate slice ([PR #23](https://github.com/DrFlorianLabs/twincare-amont/pull/23)).
 - `TC-005`: optional attachment linked to a preparation case.
 - `TC-006`: deterministic readiness, tasks and professional vignette.
 - `TC-007`: explicit closure and protected audit events.

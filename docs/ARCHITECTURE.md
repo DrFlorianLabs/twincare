@@ -132,6 +132,15 @@ authentication. A server-derived grant resolves to exactly one active
 preparation case; the browser never selects its organization, case or scope.
 Every clinical write must revalidate that grant inside the write transaction.
 
+## 4.4 Patient contribution boundary
+
+The first clinical write is defined in
+[`adr/0004-patient-declared-consultation-reason.md`](adr/0004-patient-declared-consultation-reason.md).
+It is one patient-declared statement owned by one `PreparationCase`. The
+browser supplies neither scope nor provenance. The use case revalidates the
+session after acquiring the shared case, invitation and session locks, and no
+clinical text enters ordinary logs or security events.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:

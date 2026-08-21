@@ -38,6 +38,36 @@ interface SpringDataPatientAccessSessionRepository extends JpaRepository<Patient
             @Param("tokenKeyId") String tokenKeyId,
             @Param("tokenDigest") String tokenDigest);
 
+    @Query("""
+            select session.id as sessionId,
+                   session.invitationId as invitationId,
+                   session.organizationId as organizationId,
+                   session.preparationCaseId as preparationCaseId,
+                   session.scope as scope,
+                   invitation.status as invitationStatus,
+                   preparationCase.status as preparationCaseStatus,
+                   session.issuedAt as issuedAt,
+                   session.expiresAt as expiresAt,
+                   session.revokedAt as revokedAt
+            from PatientAccessSessionJpaEntity session,
+                 PatientInvitationJpaEntity invitation,
+                 PreparationCaseJpaEntity preparationCase
+            where session.id = :sessionId
+              and session.invitationId = :invitationId
+              and session.preparationCaseId = :preparationCaseId
+              and session.organizationId = :organizationId
+              and invitation.id = session.invitationId
+              and invitation.organizationId = session.organizationId
+              and invitation.preparationCaseId = session.preparationCaseId
+              and preparationCase.id = session.preparationCaseId
+              and preparationCase.organizationId = session.organizationId
+            """)
+    Optional<PatientAccessSessionScopeView> findScopeByIdentity(
+            @Param("sessionId") UUID sessionId,
+            @Param("invitationId") UUID invitationId,
+            @Param("preparationCaseId") UUID preparationCaseId,
+            @Param("organizationId") String organizationId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<PatientAccessSessionJpaEntity> findByIdAndInvitationIdAndPreparationCaseIdAndOrganizationId(
             UUID id,

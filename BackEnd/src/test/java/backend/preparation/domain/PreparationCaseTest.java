@@ -138,6 +138,31 @@ class PreparationCaseTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Patient statement exceeds the allowed length")
                 .hasMessageNotContaining(oversized);
+
+        assertThatThrownBy(() -> PatientStatement.declaredByPatient("Motif\0injecté", CREATED_AT))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Patient statement contains invalid characters");
+    }
+
+    @Test
+    void normalizesOuterWhitespaceButPreservesPatientFormattingAndIdenticalRetries() {
+        PreparationCase preparationCase = newCase();
+        preparationCase.startPatientPreparation(atMinute(1));
+        preparationCase.releaseDomainEvents();
+
+        assertThat(preparationCase.recordPatientReason("  Première ligne\nSeconde ligne  ", atMinute(2)))
+                .isTrue();
+        preparationCase.releaseDomainEvents();
+        Instant firstRecordedAt = preparationCase.patientReason().orElseThrow().recordedAt();
+
+        assertThat(preparationCase.recordPatientReason("Première ligne\nSeconde ligne", atMinute(3)))
+                .isFalse();
+        assertThat(preparationCase.patientReason()).get().satisfies(reason -> {
+            assertThat(reason.text()).isEqualTo("Première ligne\nSeconde ligne");
+            assertThat(reason.recordedAt()).isEqualTo(firstRecordedAt);
+        });
+        assertThat(preparationCase.updatedAt()).isEqualTo(firstRecordedAt);
+        assertThat(preparationCase.releaseDomainEvents()).isEmpty();
     }
 
     @Test
