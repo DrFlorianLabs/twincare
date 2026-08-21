@@ -284,6 +284,19 @@ Patient UI and professional UI may remain separate deployable frontends for now,
 
 No frontend contains a hard-coded production provider URL. API origin is relative by default and configurable through environment configuration.
 
+The professional frontend discovers its active organisations and advisory UI
+capabilities through the server-owned `/api/v1/professional-context` endpoint.
+It never derives authorization from a route, a locally stored role or a client
+supplied actor. Every clinical read and command remains authorized again by the
+backend.
+
+The V0.1 workspace is deliberately a thin task-oriented client over the
+professional read model. It does not call the historical dossier, document,
+user or chatbot APIs; does not compute readiness; and does not persist patient
+reason, task labels, attachment metadata or response bodies in browser storage.
+Concurrent organisation/case changes cancel and supersede pending reads so a
+late response cannot repopulate another tenant's screen.
+
 ## 9. Error handling and observability
 
 - Errors exposed to clients are typed and do not leak stack traces or filesystem paths.

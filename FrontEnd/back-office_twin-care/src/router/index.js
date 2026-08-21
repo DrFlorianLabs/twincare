@@ -1,31 +1,30 @@
-import { createRouter, createWebHistory } from 'vue-router';
-import LoginView from '../views/LoginView.vue';
-import AssistantView from '../views/AssistantView.vue';
-import DoctorView from '../views/DoctorView.vue';
-
-const routes = [
-  { path: '/', redirect: '/login' }, // Redirige l'accueil vers la connexion
-  { path: '/login', name: 'Login', component: LoginView },
-  { path: '/assistant', name: 'Assistant', component: AssistantView },
-  { path: '/medecin', name: 'Medecin', component: DoctorView },
-];
+import { createRouter, createWebHistory } from 'vue-router'
+import LoginView from '../views/LoginView.vue'
+import ProfessionalWorkspaceView from '../views/ProfessionalWorkspaceView.vue'
+import { professionalToken } from '../services/api'
 
 const router = createRouter({
   history: createWebHistory(),
-  routes,
-});
+  routes: [
+    { path: '/', redirect: '/preparations' },
+    { path: '/login', name: 'Login', component: LoginView },
+    { path: '/preparations/:caseId?', name: 'Preparations', component: ProfessionalWorkspaceView },
+    { path: '/medecin', redirect: '/preparations' },
+    { path: '/assistant', redirect: '/preparations' },
+    { path: '/:pathMatch(.*)*', redirect: '/preparations' }
+  ]
+})
 
-// Gardien de navigation (Vigile mis à jour pour Vue Router 4)
-router.beforeEach((to, from) => {
-  // On vérifie le "token" (le badge officiel) ou le "role" (comme écrit dans ton LoginView)
-  const estConnecte = localStorage.getItem('token'); 
+router.beforeEach((to) => {
+  const authenticated = Boolean(professionalToken())
 
-  if (to.name !== 'Login' && !estConnecte) {
-    // Si pas connecté et qu'on essaie d'aller ailleurs, on renvoie vers le Login
-    return { name: 'Login' };
+  if (to.name === 'Login') {
+    return authenticated ? { name: 'Preparations' } : true
   }
-  // Sinon, on laisse passer naturellement (plus besoin de next() !)
-  return true;
-});
+  if (!authenticated) {
+    return { name: 'Login' }
+  }
+  return true
+})
 
-export default router;
+export default router
