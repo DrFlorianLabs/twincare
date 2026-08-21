@@ -88,7 +88,7 @@ until every applicable gate is closed.
 - `TC-001` — completed: pure `PreparationCase` domain and invariants ([PR #19](https://github.com/DrFlorianLabs/twincare-amont/pull/19)).
 - `TC-002` — completed: manual professional creation, persistence and authorization ([PR #20](https://github.com/DrFlorianLabs/twincare-amont/pull/20)).
 - `TC-003` — completed: secure patient invitation lifecycle and scoped patient session bootstrap ([PR #21](https://github.com/DrFlorianLabs/twincare-amont/pull/21)).
-- `TC-004a` — completed: patient session authentication, CSRF and explicit logout.
+- `TC-004a` — completed: patient session authentication, CSRF and explicit logout ([PR #22](https://github.com/DrFlorianLabs/twincare-amont/pull/22)).
 - `TC-004b`: patient free-text reason and minimal structured responses.
 - `TC-005`: optional attachment linked to a preparation case.
 - `TC-006`: deterministic readiness, tasks and professional vignette.
