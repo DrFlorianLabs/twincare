@@ -95,6 +95,9 @@ public final class PreparationCase {
             throw new IllegalArgumentException(
                     "A preparation case requires an appointment reference or consultation deadline");
         }
+        if (scheduledAt.filter(scheduled -> scheduled.isBefore(createdAt)).isPresent()) {
+            throw new IllegalArgumentException("Consultation deadline cannot precede case creation");
+        }
         if (updatedAt.isBefore(createdAt)) {
             throw new IllegalArgumentException("Update timestamp cannot precede creation timestamp");
         }

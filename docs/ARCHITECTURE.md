@@ -104,6 +104,15 @@ Same replacement rule: local/no-op implementation is always possible. Raw health
 
 V0.1 baseline is an internal task queue. Calendar integration is an adapter. If a calendar API is unavailable, the task still exists and remains actionable inside TwinCare.
 
+## 4.1 Organization ownership
+
+The organization boundary for the new consultation-preparation module is
+defined in [`adr/0001-organization-membership-and-scope.md`](adr/0001-organization-membership-and-scope.md).
+Its controlled initial provisioning procedure is
+[`ORGANIZATION_BOOTSTRAP.md`](ORGANIZATION_BOOTSTRAP.md). This isolation does not
+retroactively make the historical prototype routes suitable for real patient
+data.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:

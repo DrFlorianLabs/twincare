@@ -4,9 +4,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+import backend.preparation.application.InvalidPreparationCaseCommandException;
+import backend.preparation.application.PreparationCaseConflictException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -38,6 +43,23 @@ public class GlobalExceptionHandler {
                 .orElse("Requête invalide");
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(message);
+    }
+
+    @ExceptionHandler({ HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class })
+    public ResponseEntity<String> handleMalformedRequest(Exception e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Requête invalide");
+    }
+
+    @ExceptionHandler(InvalidPreparationCaseCommandException.class)
+    public ResponseEntity<String> handleInvalidPreparationCase(InvalidPreparationCaseCommandException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body("Requête de création de préparation invalide");
+    }
+
+    @ExceptionHandler(PreparationCaseConflictException.class)
+    public ResponseEntity<String> handleConflict(PreparationCaseConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body("Une préparation existe déjà pour cette consultation");
     }
 
     @ExceptionHandler(Exception.class)

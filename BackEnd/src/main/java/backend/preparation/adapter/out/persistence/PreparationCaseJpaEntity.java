@@ -1,0 +1,140 @@
+package backend.preparation.adapter.out.persistence;
+
+import java.time.Instant;
+import java.util.UUID;
+
+import backend.preparation.domain.PreparationCaseStatus;
+import backend.preparation.domain.ProvenanceType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
+
+@Entity
+@Table(
+        name = "preparation_case",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uq_preparation_case_appointment",
+                        columnNames = { "organization_id", "appointment_reference" }),
+                @UniqueConstraint(
+                        name = "uq_preparation_case_patient_schedule",
+                        columnNames = { "organization_id", "patient_reference", "scheduled_at" })
+        })
+class PreparationCaseJpaEntity {
+
+    @Id
+    private UUID id;
+
+    @Column(name = "organization_id", nullable = false, length = 128)
+    private String organizationId;
+
+    @Column(name = "patient_reference", nullable = false, length = 128)
+    private String patientReference;
+
+    @Column(name = "appointment_reference", length = 128)
+    private String appointmentReference;
+
+    @Column(name = "scheduled_at")
+    private Instant scheduledAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 40, columnDefinition = "VARCHAR(40)")
+    private PreparationCaseStatus status;
+
+    @Column(name = "patient_reason", length = 4000)
+    private String patientReason;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "patient_reason_provenance", length = 40, columnDefinition = "VARCHAR(40)")
+    private ProvenanceType patientReasonProvenance;
+
+    @Column(name = "patient_reason_recorded_at")
+    private Instant patientReasonRecordedAt;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
+    protected PreparationCaseJpaEntity() {
+    }
+
+    PreparationCaseJpaEntity(
+            UUID id,
+            String organizationId,
+            String patientReference,
+            String appointmentReference,
+            Instant scheduledAt,
+            PreparationCaseStatus status,
+            String patientReason,
+            ProvenanceType patientReasonProvenance,
+            Instant patientReasonRecordedAt,
+            Instant createdAt,
+            Instant updatedAt) {
+        this.id = id;
+        this.organizationId = organizationId;
+        this.patientReference = patientReference;
+        this.appointmentReference = appointmentReference;
+        this.scheduledAt = scheduledAt;
+        this.status = status;
+        this.patientReason = patientReason;
+        this.patientReasonProvenance = patientReasonProvenance;
+        this.patientReasonRecordedAt = patientReasonRecordedAt;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+    }
+
+    UUID id() {
+        return id;
+    }
+
+    String organizationId() {
+        return organizationId;
+    }
+
+    String patientReference() {
+        return patientReference;
+    }
+
+    String appointmentReference() {
+        return appointmentReference;
+    }
+
+    Instant scheduledAt() {
+        return scheduledAt;
+    }
+
+    PreparationCaseStatus status() {
+        return status;
+    }
+
+    String patientReason() {
+        return patientReason;
+    }
+
+    ProvenanceType patientReasonProvenance() {
+        return patientReasonProvenance;
+    }
+
+    Instant patientReasonRecordedAt() {
+        return patientReasonRecordedAt;
+    }
+
+    Instant createdAt() {
+        return createdAt;
+    }
+
+    Instant updatedAt() {
+        return updatedAt;
+    }
+}
