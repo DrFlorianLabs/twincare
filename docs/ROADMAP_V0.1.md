@@ -95,5 +95,5 @@ until every applicable gate is closed.
 - `TC-006b` — delivered: human preparation tasks and revision-bound clinician readiness confirmation ([PR #26](https://github.com/DrFlorianLabs/twincare-amont/pull/26)).
 - `TC-006c` — delivered: authenticated, integrity-checked professional attachment download ([PR #27](https://github.com/DrFlorianLabs/twincare-amont/pull/27)).
 - `TC-006d-a` — delivered: server-derived professional organization/capability context ([PR #28](https://github.com/DrFlorianLabs/twincare-amont/pull/28)).
-- `TC-006d-b` — implementation and independent review in progress: minimal professional worklist and preparation-view frontend.
+- `TC-006d-b` — in review: minimal professional worklist and preparation-view frontend ([PR #29](https://github.com/DrFlorianLabs/twincare-amont/pull/29)).
 - `TC-007`: explicit closure and protected audit events.
