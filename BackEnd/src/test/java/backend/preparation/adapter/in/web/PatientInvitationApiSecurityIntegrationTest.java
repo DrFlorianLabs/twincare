@@ -396,6 +396,48 @@ class PatientInvitationApiSecurityIntegrationTest {
     }
 
     @Test
+    void patientReasonReadIsBoundToTheServerIssuedOrganizationAndCaseScope() throws Exception {
+        addMembership(ORGANIZATION_B, physician, "CLINICIAN", true);
+        UUID caseInOrganizationA = createCase(
+                ORGANIZATION_A, physician, "appointment-patient-reason-read-org-a");
+        UUID caseInOrganizationB = createCase(
+                ORGANIZATION_B, physician, "appointment-patient-reason-read-org-b");
+        String sessionInOrganizationA = exchangedSessionToken(
+                issueInvitation(ORGANIZATION_A, caseInOrganizationA, physician).token());
+        String sessionInOrganizationB = exchangedSessionToken(
+                issueInvitation(ORGANIZATION_B, caseInOrganizationB, physician).token());
+        String reasonInOrganizationA = "Motif synthétique réservé au cabinet A";
+        String reasonInOrganizationB = "Motif synthétique réservé au cabinet B";
+
+        patientReason(
+                sessionInOrganizationA,
+                csrfFor(sessionInOrganizationA),
+                "http://localhost:3000",
+                "{\"reason\":\"%s\"}".formatted(reasonInOrganizationA))
+                .andExpect(status().isNoContent());
+        patientReason(
+                sessionInOrganizationB,
+                csrfFor(sessionInOrganizationB),
+                "http://localhost:3000",
+                "{\"reason\":\"%s\"}".formatted(reasonInOrganizationB))
+                .andExpect(status().isNoContent());
+
+        MvcResult organizationBRead = mockMvc.perform(get("/api/v1/patient-access/reason")
+                        .cookie(sessionCookie(sessionInOrganizationB)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.present").value(true))
+                .andExpect(jsonPath("$.reason").value(reasonInOrganizationB))
+                .andReturn();
+
+        assertThat(organizationBRead.getResponse().getContentAsString())
+                .doesNotContain(
+                        reasonInOrganizationA,
+                        caseInOrganizationA.toString(),
+                        ORGANIZATION_A,
+                        sessionInOrganizationA);
+    }
+
+    @Test
     void patientReasonReadRejectsMissingJwtRevokedAndTerminalScopesUniformly() throws Exception {
         UUID revokedCase = createCase(ORGANIZATION_A, physician, "appointment-patient-reason-read-revoked");
         IssuedInvitation revokedInvitation = issueInvitation(ORGANIZATION_A, revokedCase, physician);
