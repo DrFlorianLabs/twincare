@@ -37,6 +37,7 @@ class ProfessionalPreparationRepeatableReadIntegrationTest {
 
     @AfterEach
     void tearDown() {
+        jdbcTemplate.update("DELETE FROM preparation_audit_event");
         jdbcTemplate.update("DELETE FROM preparation_task");
         jdbcTemplate.update("DELETE FROM preparation_case");
     }

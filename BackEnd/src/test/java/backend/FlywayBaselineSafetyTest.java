@@ -339,6 +339,149 @@ class FlywayBaselineSafetyTest {
     }
 
     @Test
+    void upgradesV9WithTenantBoundMinimizedAuditConstraints() throws Exception {
+        String databaseName = "v9_audit_" + UUID.randomUUID().toString().replace("-", "");
+        String url = "jdbc:h2:mem:" + databaseName + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
+
+        Flyway.configure()
+                .dataSource(url, "sa", "")
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion(MigrationVersion.fromVersion("4"))
+                .target(MigrationVersion.fromVersion("9"))
+                .load()
+                .migrate();
+
+        try (var connection = DriverManager.getConnection(url, "sa", "");
+                var statement = connection.createStatement()) {
+            statement.execute("""
+                    INSERT INTO care_organization (id, display_name, created_at)
+                    VALUES
+                        ('audit-org-a', 'Synthetic A', CURRENT_TIMESTAMP),
+                        ('audit-org-b', 'Synthetic B', CURRENT_TIMESTAMP)
+                    """);
+            statement.execute("""
+                    INSERT INTO app_utilisateur (
+                        id, nom, prenom, date_naissance, email, mot_de_passe, role, sexe
+                    ) VALUES (
+                        9201, 'Synthetic', 'Clinician', DATE '1990-01-01',
+                        'audit-clinician@example.test', 'not-a-real-password', 'MEDECIN', 'NON_PRECISE'
+                    )
+                    """);
+            statement.execute("""
+                    INSERT INTO organization_membership (
+                        id, organization_id, user_id, membership_role, active, created_at
+                    ) VALUES (RANDOM_UUID(), 'audit-org-a', 9201, 'CLINICIAN', TRUE, CURRENT_TIMESTAMP)
+                    """);
+            statement.execute("""
+                    INSERT INTO preparation_case (
+                        id, organization_id, patient_reference, appointment_reference,
+                        status, created_at, updated_at, version
+                    ) VALUES (
+                        UUID '80000000-0000-0000-0000-000000000001',
+                        'audit-org-a', 'synthetic-patient', 'synthetic-appointment',
+                        'CREATED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
+                    )
+                    """);
+        }
+
+        Flyway.configure()
+                .dataSource(url, "sa", "")
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion(MigrationVersion.fromVersion("4"))
+                .load()
+                .migrate();
+
+        try (var connection = DriverManager.getConnection(url, "sa", "");
+                var statement = connection.createStatement()) {
+            assertThat(statement.executeQuery("SELECT COUNT(*) FROM preparation_audit_event").next()).isTrue();
+            statement.execute("""
+                    INSERT INTO preparation_audit_event (
+                        event_id, organization_id, preparation_case_id, event_sequence,
+                        event_type, event_version, actor_kind, actor_user_id,
+                        occurred_at, case_revision, subject_type, subject_id
+                    ) VALUES (
+                        UUID '81000000-0000-0000-0000-000000000001', 'audit-org-a',
+                        UUID '80000000-0000-0000-0000-000000000001', 1,
+                        'PREPARATION_CREATED', 1, 'STAFF', 9201,
+                        CURRENT_TIMESTAMP, 0, NULL, NULL
+                    )
+                    """);
+
+            assertThatThrownBy(() -> statement.execute("""
+                    INSERT INTO preparation_audit_event (
+                        event_id, organization_id, preparation_case_id, event_sequence,
+                        event_type, event_version, actor_kind, actor_user_id,
+                        occurred_at, case_revision, subject_type, subject_id
+                    ) VALUES (
+                        RANDOM_UUID(), 'audit-org-a',
+                        UUID '80000000-0000-0000-0000-000000000001', 1,
+                        'READY_CONFIRMED', 1, 'STAFF', 9201,
+                        CURRENT_TIMESTAMP, 0, NULL, NULL
+                    )
+                    """))
+                    .hasMessageContaining("UQ_PREPARATION_AUDIT_CASE_SEQUENCE");
+
+            assertThatThrownBy(() -> statement.execute("""
+                    INSERT INTO preparation_audit_event (
+                        event_id, organization_id, preparation_case_id, event_sequence,
+                        event_type, event_version, actor_kind, actor_user_id,
+                        occurred_at, case_revision, subject_type, subject_id
+                    ) VALUES (
+                        RANDOM_UUID(), 'audit-org-a',
+                        UUID '80000000-0000-0000-0000-000000000001', 2,
+                        'PREPARATION_CREATED', 1, 'STAFF', 9201,
+                        CURRENT_TIMESTAMP, 0, NULL, NULL
+                    )
+                    """))
+                    .hasMessageContaining("CK_PREPARATION_AUDIT_CREATION_SEQUENCE");
+
+            assertThatThrownBy(() -> statement.execute("""
+                    INSERT INTO preparation_audit_event (
+                        event_id, organization_id, preparation_case_id, event_sequence,
+                        event_type, event_version, actor_kind, actor_user_id,
+                        occurred_at, case_revision, subject_type, subject_id
+                    ) VALUES (
+                        RANDOM_UUID(), 'audit-org-a',
+                        UUID '80000000-0000-0000-0000-000000000001', 2,
+                        'TASK_CREATED', 1, 'STAFF', 9201,
+                        CURRENT_TIMESTAMP, 1, 'ATTACHMENT', RANDOM_UUID()
+                    )
+                    """))
+                    .hasMessageContaining("CK_PREPARATION_AUDIT_SUBJECT");
+
+            assertThatThrownBy(() -> statement.execute("""
+                    INSERT INTO preparation_audit_event (
+                        event_id, organization_id, preparation_case_id, event_sequence,
+                        event_type, event_version, actor_kind, actor_user_id,
+                        occurred_at, case_revision, subject_type, subject_id
+                    ) VALUES (
+                        RANDOM_UUID(), 'audit-org-a',
+                        UUID '80000000-0000-0000-0000-000000000001', 2,
+                        'PATIENT_ACCESS_REVOKED', 1, 'PATIENT', NULL,
+                        CURRENT_TIMESTAMP, 0, NULL, NULL
+                    )
+                    """))
+                    .hasMessageContaining("CK_PREPARATION_AUDIT_ACTOR_EVENT");
+
+            assertThatThrownBy(() -> statement.execute("""
+                    INSERT INTO preparation_audit_event (
+                        event_id, organization_id, preparation_case_id, event_sequence,
+                        event_type, event_version, actor_kind, actor_user_id,
+                        occurred_at, case_revision, subject_type, subject_id
+                    ) VALUES (
+                        RANDOM_UUID(), 'audit-org-b',
+                        UUID '80000000-0000-0000-0000-000000000001', 2,
+                        'INVITATION_EXPIRED', 1, 'SYSTEM', NULL,
+                        CURRENT_TIMESTAMP, 0, 'INVITATION', RANDOM_UUID()
+                    )
+                    """))
+                    .hasMessageContaining("FK_PREPARATION_AUDIT_CASE_ORGANIZATION");
+        }
+    }
+
+    @Test
     void baselinesLegacySchemaAfterDestructivePrototypeMigrations() throws Exception {
         String databaseName = "legacy_" + UUID.randomUUID().toString().replace("-", "");
         String url = "jdbc:h2:mem:" + databaseName + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1";

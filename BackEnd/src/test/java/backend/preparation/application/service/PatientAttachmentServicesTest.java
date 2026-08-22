@@ -154,7 +154,7 @@ class PatientAttachmentServicesTest {
         when(attachments.findByCaseForUpdate(CASE_ID, ORGANIZATION_ID))
                 .thenReturn(Optional.of(existing), Optional.empty());
         DeletePatientAttachmentService service = new DeletePatientAttachmentService(
-                scopeLock(), attachments, storageTransaction);
+                scopeLock(), attachments, storageTransaction, event -> { });
 
         service.delete(new DeletePatientAttachmentCommand(grant));
         service.delete(new DeletePatientAttachmentCommand(grant));
@@ -183,7 +183,7 @@ class PatientAttachmentServicesTest {
         AttachmentIdGenerator idGenerator = () -> new AttachmentId(
                 UUID.fromString("40000000-0000-0000-0000-000000000001"));
         return new CommitStagedPatientAttachmentService(
-                scopeLock(), attachments, idGenerator, storageTransaction);
+                scopeLock(), attachments, idGenerator, storageTransaction, event -> { });
     }
 
     private PatientAttachmentScopeLock scopeLock() {

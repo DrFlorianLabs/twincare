@@ -73,6 +73,10 @@ class JpaPreparationCaseAuthorizationTest {
                 ORGANIZATION_ID,
                 PreparationCaseCapability.CONFIRM_READY_FOR_CONSULTATION))
                 .isInstanceOf(UnauthorizedActionException.class);
+        assertThatThrownBy(() -> authorization.requireAccess(
+                ORGANIZATION_ID,
+                PreparationCaseCapability.VIEW_PREPARATION_AUDIT))
+                .isInstanceOf(UnauthorizedActionException.class);
     }
 
     @Test

@@ -231,6 +231,23 @@ administrative-only memberships are omitted, and the response contains no
 patient or preparation data. See
 [`adr/0009-professional-context-discovery.md`](adr/0009-professional-context-discovery.md).
 
+## 4.10 Preparation audit boundary
+
+The durable workflow chronology is defined in
+[`adr/0011-append-only-preparation-audit.md`](adr/0011-append-only-preparation-audit.md).
+It is a small append-only store, not an event bus or event-sourcing platform.
+Every consequential preparation mutation records a typed, versioned and
+minimized event in the same database transaction; an audit failure rolls the
+mutation back.
+
+Audit events contain workflow metadata only. Patient wording, patient
+references, task labels, filenames, storage data, credentials and arbitrary
+payloads are forbidden. Events are sequenced per case under the existing case
+lock and retain the persisted case revision. The protected read API is
+tenant-scoped, cursor-paginated and clinician-only. Historical cases are never
+given a fabricated history: the read model explicitly reports when coverage
+does not begin at creation.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:
@@ -302,7 +319,9 @@ late response cannot repopulate another tenant's screen.
 - Errors exposed to clients are typed and do not leak stack traces or filesystem paths.
 - Logs contain event type, technical correlation IDs and non-sensitive operational metadata only.
 - Never log free-text patient content, document names/content, clinical scores attached to an identifiable patient, email addresses or access tokens.
-- Security/audit events are a distinct concern from application logs.
+- Security/audit events are a distinct concern from application logs. The
+  preparation audit is persisted atomically and is never reconstructed from
+  ordinary log output.
 
 ## 10. Dependency policy
 

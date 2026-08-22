@@ -77,11 +77,16 @@ public class JpaPatientAccessSessionRepositoryAdapter implements PatientAccessSe
     }
 
     @Override
-    public void revokeByInvitationId(PatientInvitationId invitationId, Instant occurredAt) {
-        repository.findByInvitationId(invitationId.value()).ifPresent(entity -> {
-            entity.revoke(occurredAt);
-            repository.saveAndFlush(entity);
-        });
+    public boolean revokeByInvitationId(PatientInvitationId invitationId, Instant occurredAt) {
+        return repository.findByInvitationId(invitationId.value())
+                .map(entity -> {
+                    if (!entity.revoke(occurredAt)) {
+                        return false;
+                    }
+                    repository.saveAndFlush(entity);
+                    return true;
+                })
+                .orElse(false);
     }
 
     private PatientAccessSessionScope toScope(

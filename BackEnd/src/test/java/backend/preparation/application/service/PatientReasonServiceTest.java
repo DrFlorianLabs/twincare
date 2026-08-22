@@ -148,6 +148,7 @@ class PatientReasonServiceTest {
                     cases,
                     new InMemoryInvitationRepository(invitation, operations),
                     new InMemorySessionRepository(session, operations),
+                    event -> { },
                     new RecordingClock(operations));
         }
     }
@@ -168,9 +169,10 @@ class PatientReasonServiceTest {
         }
 
         @Override
-        public void update(PreparationCase candidate) {
+        public long update(PreparationCase candidate) {
             assertThat(candidate).isSameAs(preparationCase);
             updateCount++;
+            return candidate.revision() + 1;
         }
 
         @Override
@@ -305,7 +307,7 @@ class PatientReasonServiceTest {
         }
 
         @Override
-        public void revokeByInvitationId(PatientInvitationId invitationId, Instant occurredAt) {
+        public boolean revokeByInvitationId(PatientInvitationId invitationId, Instant occurredAt) {
             throw new UnsupportedOperationException();
         }
     }

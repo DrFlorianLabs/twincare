@@ -73,6 +73,7 @@ class ProfessionalPreparationCommandServiceTest {
                 tasks,
                 confirmations,
                 taskIdGenerator,
+                event -> { },
                 new PreparationReadinessPolicy(),
                 Clock.fixed(NOW, ZoneOffset.UTC));
         when(authorization.requireAccess(ORGANIZATION_ID, PreparationCaseCapability.MANAGE_PREPARATION_TASKS))

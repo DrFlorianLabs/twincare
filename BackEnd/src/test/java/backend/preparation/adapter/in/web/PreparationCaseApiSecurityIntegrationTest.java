@@ -55,6 +55,7 @@ class PreparationCaseApiSecurityIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        jdbcTemplate.update("DELETE FROM preparation_audit_event");
         jdbcTemplate.update("DELETE FROM preparation_ready_confirmation");
         jdbcTemplate.update("DELETE FROM preparation_task");
         jdbcTemplate.update("DELETE FROM preparation_case");
@@ -66,6 +67,7 @@ class PreparationCaseApiSecurityIntegrationTest {
 
     @AfterEach
     void tearDown() {
+        jdbcTemplate.update("DELETE FROM preparation_audit_event");
         jdbcTemplate.update("DELETE FROM preparation_ready_confirmation");
         jdbcTemplate.update("DELETE FROM preparation_task");
         jdbcTemplate.update("DELETE FROM preparation_case");

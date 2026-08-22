@@ -38,6 +38,7 @@ class CreatePreparationCaseServiceTest {
                 authorization,
                 repository,
                 () -> CASE_ID,
+                event -> { },
                 Clock.fixed(NOW, ZoneOffset.UTC));
 
         var result = service.create(command());
@@ -65,6 +66,7 @@ class CreatePreparationCaseServiceTest {
                     idGenerated[0] = true;
                     return CASE_ID;
                 },
+                event -> { },
                 Clock.fixed(NOW, ZoneOffset.UTC));
 
         assertThatThrownBy(() -> service.create(command()))
@@ -80,6 +82,7 @@ class CreatePreparationCaseServiceTest {
                 organizationId -> 17L,
                 repository,
                 () -> CASE_ID,
+                event -> { },
                 Clock.fixed(NOW, ZoneOffset.UTC));
         CreatePreparationCaseCommand pastDeadline = new CreatePreparationCaseCommand(
                 ORGANIZATION_ID,
@@ -119,8 +122,9 @@ class CreatePreparationCaseServiceTest {
         }
 
         @Override
-        public void update(PreparationCase preparationCase) {
+        public long update(PreparationCase preparationCase) {
             added = preparationCase;
+            return preparationCase.revision() + 1;
         }
 
         @Override

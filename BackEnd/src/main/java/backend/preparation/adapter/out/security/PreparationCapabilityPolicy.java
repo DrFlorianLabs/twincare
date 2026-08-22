@@ -28,6 +28,7 @@ final class PreparationCapabilityPolicy {
         if (platformRole == Role.MEDECIN
                 && membershipRole == OrganizationMembershipRole.CLINICIAN) {
             capabilities.add(PreparationCaseCapability.CONFIRM_READY_FOR_CONSULTATION);
+            capabilities.add(PreparationCaseCapability.VIEW_PREPARATION_AUDIT);
         }
         return Collections.unmodifiableSet(capabilities);
     }

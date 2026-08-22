@@ -82,9 +82,9 @@ public final class PatientAttachmentScopeLock {
         return new LockedPatientAttachmentScope(preparationCase, attachment, now);
     }
 
-    void touchVisibleContent(LockedPatientAttachmentScope lockedScope) {
+    long touchVisibleContent(LockedPatientAttachmentScope lockedScope) {
         lockedScope.preparationCase().touchVisibleContent(lockedScope.now());
-        preparationCases.update(lockedScope.preparationCase());
+        return preparationCases.update(lockedScope.preparationCase());
     }
 
     record LockedPatientAttachmentScope(

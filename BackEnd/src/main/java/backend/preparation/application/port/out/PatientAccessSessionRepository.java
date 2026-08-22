@@ -30,5 +30,5 @@ public interface PatientAccessSessionRepository {
 
     void update(PatientAccessSession session);
 
-    void revokeByInvitationId(PatientInvitationId invitationId, Instant occurredAt);
+    boolean revokeByInvitationId(PatientInvitationId invitationId, Instant occurredAt);
 }

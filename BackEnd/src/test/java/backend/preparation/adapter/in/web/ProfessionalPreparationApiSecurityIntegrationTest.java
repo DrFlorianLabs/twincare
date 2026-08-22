@@ -456,6 +456,7 @@ class ProfessionalPreparationApiSecurityIntegrationTest {
     }
 
     private void clearPreparationData() {
+        jdbcTemplate.update("DELETE FROM preparation_audit_event");
         jdbcTemplate.update("DELETE FROM preparation_attachment");
         jdbcTemplate.update("DELETE FROM preparation_ready_confirmation");
         jdbcTemplate.update("DELETE FROM preparation_task");

@@ -3,6 +3,7 @@ package backend.preparation.application.service;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 import backend.preparation.application.PatientInvitationUnavailableException;
 import backend.preparation.application.port.in.ExchangePatientInvitationCommand;
@@ -13,6 +14,7 @@ import backend.preparation.application.port.out.PatientAccessSessionRepository;
 import backend.preparation.application.port.out.PatientInvitationExchangeGuard;
 import backend.preparation.application.port.out.PatientInvitationRepository;
 import backend.preparation.application.port.out.PreparationCaseRepository;
+import backend.preparation.application.port.out.PreparationAuditEventStore;
 import backend.preparation.application.port.out.SecureTokenDigester;
 import backend.preparation.application.port.out.SecureTokenGenerator;
 import backend.preparation.domain.PatientAccessSession;
@@ -22,6 +24,10 @@ import backend.preparation.domain.PreparationCase;
 import backend.preparation.domain.PreparationCaseStatus;
 import backend.preparation.domain.SecureToken;
 import backend.preparation.domain.TokenDigest;
+import backend.preparation.domain.PreparationAuditEvent;
+import backend.preparation.domain.PreparationAuditEventType;
+import backend.preparation.domain.PreparationAuditSubject;
+import backend.preparation.domain.PreparationAuditSubjectType;
 
 public final class ExchangePatientInvitationService implements ExchangePatientInvitationUseCase {
 
@@ -34,6 +40,7 @@ public final class ExchangePatientInvitationService implements ExchangePatientIn
     private final SecureTokenGenerator tokenGenerator;
     private final SecureTokenDigester tokenDigester;
     private final PatientInvitationExchangeGuard exchangeGuard;
+    private final PreparationAuditEventStore auditEvents;
     private final Clock clock;
 
     public ExchangePatientInvitationService(
@@ -44,6 +51,7 @@ public final class ExchangePatientInvitationService implements ExchangePatientIn
             SecureTokenGenerator tokenGenerator,
             SecureTokenDigester tokenDigester,
             PatientInvitationExchangeGuard exchangeGuard,
+            PreparationAuditEventStore auditEvents,
             Clock clock) {
         this.invitations = Objects.requireNonNull(invitations);
         this.preparationCases = Objects.requireNonNull(preparationCases);
@@ -52,13 +60,14 @@ public final class ExchangePatientInvitationService implements ExchangePatientIn
         this.tokenGenerator = Objects.requireNonNull(tokenGenerator);
         this.tokenDigester = Objects.requireNonNull(tokenDigester);
         this.exchangeGuard = Objects.requireNonNull(exchangeGuard);
+        this.auditEvents = Objects.requireNonNull(auditEvents);
         this.clock = Objects.requireNonNull(clock);
     }
 
     @Override
     public ExchangePatientInvitationResult exchange(ExchangePatientInvitationCommand command) {
-        Instant now = clock.instant();
-        exchangeGuard.requireAttemptAllowed(now);
+        Instant attemptAt = clock.instant();
+        exchangeGuard.requireAttemptAllowed(attemptAt);
         ParsedClientToken parsedToken = digestClientToken(command == null ? null : command.token());
         var preliminaryMatch = invitations.findScopeByTokenDigest(parsedToken.digest());
         if (parsedToken.malformed()) {
@@ -78,19 +87,47 @@ public final class ExchangePatientInvitationService implements ExchangePatientIn
                 || !invitation.organizationId().equals(preparationCase.organizationId())) {
             throw new PatientInvitationUnavailableException();
         }
+        Instant mutationAt = clock.instant();
         if (invitation.status() != PatientInvitationStatus.ACTIVE) {
             throw new PatientInvitationUnavailableException();
         }
-        if (invitation.expiresAtOrBefore(now)) {
-            invitation.expire(now);
+        if (invitation.expiresAtOrBefore(mutationAt)) {
+            invitation.expire(mutationAt);
             invitations.update(invitation);
+            auditEvents.append(PreparationAuditEvent.system(
+                    preparationCase.organizationId(),
+                    preparationCase.id(),
+                    PreparationAuditEventType.INVITATION_EXPIRED,
+                    mutationAt,
+                    preparationCase.revision(),
+                    Optional.of(new PreparationAuditSubject(
+                            PreparationAuditSubjectType.INVITATION,
+                            invitation.id().value()))));
             throw new PatientInvitationUnavailableException();
         }
 
         if (preparationCase.status() != PreparationCaseStatus.CREATED) {
-            invitation.revoke(now);
+            invitation.revoke(mutationAt);
             invitations.update(invitation);
-            accessSessions.revokeByInvitationId(invitation.id(), now);
+            boolean accessRevoked = accessSessions.revokeByInvitationId(invitation.id(), mutationAt);
+            auditEvents.append(PreparationAuditEvent.system(
+                    preparationCase.organizationId(),
+                    preparationCase.id(),
+                    PreparationAuditEventType.INVITATION_REVOKED,
+                    mutationAt,
+                    preparationCase.revision(),
+                    Optional.of(new PreparationAuditSubject(
+                            PreparationAuditSubjectType.INVITATION,
+                            invitation.id().value()))));
+            if (accessRevoked) {
+                auditEvents.append(PreparationAuditEvent.system(
+                        preparationCase.organizationId(),
+                        preparationCase.id(),
+                        PreparationAuditEventType.PATIENT_ACCESS_REVOKED,
+                        mutationAt,
+                        preparationCase.revision(),
+                        Optional.empty()));
+            }
             throw new PatientInvitationUnavailableException();
         }
 
@@ -99,12 +136,19 @@ public final class ExchangePatientInvitationService implements ExchangePatientIn
                 sessionIdGenerator.nextId(),
                 invitation,
                 tokenDigester.digestSession(sessionToken),
-                now);
-        invitation.consume(now);
-        preparationCase.startPatientPreparation(now);
+                mutationAt);
+        invitation.consume(mutationAt);
+        preparationCase.startPatientPreparation(mutationAt);
         accessSessions.add(session);
         invitations.update(invitation);
-        preparationCases.update(preparationCase);
+        long persistedRevision = preparationCases.update(preparationCase);
+        auditEvents.append(PreparationAuditEvent.patient(
+                preparationCase.organizationId(),
+                preparationCase.id(),
+                PreparationAuditEventType.PATIENT_ACCESS_STARTED,
+                mutationAt,
+                persistedRevision,
+                Optional.empty()));
         return new ExchangePatientInvitationResult(sessionToken, session.issuedAt(), session.expiresAt());
     }
 

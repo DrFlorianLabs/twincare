@@ -167,6 +167,15 @@ class ProfessionalPreparationCommandApiIntegrationTest {
                 "SELECT COUNT(*) FROM preparation_ready_confirmation WHERE preparation_case_id = ?",
                 Integer.class,
                 caseId)).isOne();
+        assertThat(jdbcTemplate.queryForList(
+                """
+                SELECT event_type
+                FROM preparation_audit_event
+                WHERE preparation_case_id = ?
+                ORDER BY event_sequence
+                """,
+                String.class,
+                caseId)).containsExactly("TASK_CREATED", "TASK_COMPLETED", "READY_CONFIRMED");
     }
 
     @Test
@@ -283,6 +292,14 @@ class ProfessionalPreparationCommandApiIntegrationTest {
                 Integer.class,
                 caseId);
         assertThat(taskCount + confirmationCount).isOne();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM preparation_audit_event WHERE preparation_case_id = ?",
+                Integer.class,
+                caseId)).isOne();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(DISTINCT event_sequence) FROM preparation_audit_event WHERE preparation_case_id = ?",
+                Integer.class,
+                caseId)).isOne();
     }
 
     private UUID insertCase(String organizationId, String status, String reason) {
@@ -311,6 +328,7 @@ class ProfessionalPreparationCommandApiIntegrationTest {
     }
 
     private void clearPreparationData() {
+        jdbcTemplate.update("DELETE FROM preparation_audit_event");
         jdbcTemplate.update("DELETE FROM preparation_ready_confirmation");
         jdbcTemplate.update("DELETE FROM preparation_task");
         jdbcTemplate.update("DELETE FROM preparation_attachment");

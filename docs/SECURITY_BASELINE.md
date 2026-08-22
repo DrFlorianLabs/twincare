@@ -60,6 +60,8 @@ For staff:
 - professional organization and capability discovery is derived exclusively
   from the authenticated server identity and active memberships; client-side
   context remains advisory and never replaces use-case authorization.
+- preparation audit access requires a dedicated clinician-only capability;
+  assistants and administrative roles receive no audit access by default.
 
 An object identifier, storage filename or UUID is **not** an authorization mechanism.
 
@@ -111,7 +113,20 @@ Do not log:
 
 Prefer event names, technical correlation IDs and aggregate timing/status metadata.
 
-Auditability is required, but audit events should be designed separately with access control and minimised payloads.
+Preparation audit events are stored separately from logs with a closed type,
+schema version, server-derived actor category, server timestamp, tenant/case
+scope, persisted case revision and optional technical subject identifier.
+They must never contain patient references, clinical text, task labels,
+filenames, storage keys, digests, credentials, IP addresses, User-Agent values
+or arbitrary JSON. A consequential mutation and its audit append share one
+transaction; audit failure rolls the mutation back. Idempotent retries and
+no-ops do not create duplicate evidence.
+
+Audit reads are tenant-scoped, bounded, cursor-paginated and `no-store`.
+Pre-audit cases are explicitly marked as historically incomplete; no synthetic
+backfill may imply a chronology that cannot be proven. There is no audit
+deletion endpoint until retention, deletion, backup, restore and legal-hold
+rules have been formally approved.
 
 ## 7. AI / model boundary
 
@@ -151,6 +166,10 @@ Before a real-health-data pilot, automated tests must cover at minimum:
 - missing/weak JWT secret prevents startup;
 - unknown clinical trigger fails closed;
 - logs do not include known test PHI markers in critical flows.
+- audit access rejects assistants, administrators, inactive memberships and
+  cross-organization case identifiers;
+- a failed audit append rolls back the corresponding business mutation;
+- audit pagination is bounded and legacy cases disclose incomplete coverage.
 
 ## 11. Deployment
 
