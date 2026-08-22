@@ -75,11 +75,13 @@ class ProfessionalContextApiSecurityIntegrationTest {
                 .andExpect(jsonPath("$.organizations.length()").value(2))
                 .andExpect(jsonPath("$.organizations[0].organizationId").value("cabinet-a"))
                 .andExpect(jsonPath("$.organizations[0].displayName").value("Cabinet Alpha"))
-                .andExpect(jsonPath("$.organizations[0].capabilities.length()").value(5))
+                .andExpect(jsonPath("$.organizations[0].capabilities.length()").value(6))
                 .andExpect(jsonPath("$.organizations[0].capabilities[0]").value("VIEW_PREPARATION"))
                 .andExpect(jsonPath("$.organizations[0].capabilities[3]")
                         .value("CONFIRM_READY_FOR_CONSULTATION"))
                 .andExpect(jsonPath("$.organizations[0].capabilities[4]")
+                        .value("CLOSE_PREPARATION_CASE"))
+                .andExpect(jsonPath("$.organizations[0].capabilities[5]")
                         .value("VIEW_PREPARATION_AUDIT"))
                 .andExpect(jsonPath("$.organizations[1].organizationId").value("cabinet-b"))
                 .andExpect(jsonPath("$.organizations[1].capabilities.length()").value(3));
@@ -98,6 +100,9 @@ class ProfessionalContextApiSecurityIntegrationTest {
                 .andExpect(jsonPath("$.organizations[0].capabilities",
                         org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(
                                 "CONFIRM_READY_FOR_CONSULTATION"))))
+                .andExpect(jsonPath("$.organizations[0].capabilities",
+                        org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(
+                                "CLOSE_PREPARATION_CASE"))))
                 .andExpect(jsonPath("$.organizations[0].capabilities",
                         org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(
                                 "VIEW_PREPARATION_AUDIT"))));

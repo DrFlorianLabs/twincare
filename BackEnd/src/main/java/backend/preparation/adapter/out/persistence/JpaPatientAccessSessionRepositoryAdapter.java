@@ -1,6 +1,7 @@
 package backend.preparation.adapter.out.persistence;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -60,6 +61,17 @@ public class JpaPatientAccessSessionRepositoryAdapter implements PatientAccessSe
                         preparationCaseId.value(),
                         organizationId.value())
                 .map(PatientAccessSessionJpaEntity::toDomain);
+    }
+
+    @Override
+    public List<PatientAccessSession> findAllByCaseForUpdate(
+            PreparationCaseId preparationCaseId,
+            OrganizationId organizationId) {
+        return repository.findAllByPreparationCaseIdAndOrganizationIdOrderById(
+                        preparationCaseId.value(), organizationId.value())
+                .stream()
+                .map(PatientAccessSessionJpaEntity::toDomain)
+                .toList();
     }
 
     @Override

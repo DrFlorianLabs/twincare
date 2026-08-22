@@ -95,6 +95,7 @@ requires the same deployment protection as the preparation data.
 - New cases have an honest, bounded chronology from creation.
 - Existing cases explicitly disclose partial historical coverage.
 - Core behavior remains provider-independent and uses no new dependency.
-- Explicit closure and its immutable proof remain TC-007b.
+- TC-007b extends this chronology with minimized `PREPARATION_CLOSED` evidence;
+  its closure semantics are defined separately in ADR 0012.
 - A real PostgreSQL concurrency proof and the approved retention policy remain
   release gates before real patient use.

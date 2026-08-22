@@ -330,6 +330,17 @@ class PatientInvitationServicesTest {
         }
 
         @Override
+        public List<PatientInvitation> findAllByCaseForUpdate(
+                PreparationCaseId preparationCaseId,
+                OrganizationId organizationId) {
+            return Optional.ofNullable(current)
+                    .filter(value -> value.preparationCaseId().equals(preparationCaseId))
+                    .filter(value -> value.organizationId().equals(organizationId))
+                    .stream()
+                    .toList();
+        }
+
+        @Override
         public Optional<PatientInvitationScope> findScopeByTokenDigest(TokenDigest tokenDigest) {
             digestLookups++;
             return Optional.ofNullable(current)
@@ -381,6 +392,17 @@ class PatientInvitationServicesTest {
                 PreparationCaseId preparationCaseId,
                 OrganizationId organizationId) {
             return Optional.empty();
+        }
+
+        @Override
+        public List<PatientAccessSession> findAllByCaseForUpdate(
+                PreparationCaseId preparationCaseId,
+                OrganizationId organizationId) {
+            return Optional.ofNullable(added)
+                    .filter(value -> value.preparationCaseId().equals(preparationCaseId))
+                    .filter(value -> value.organizationId().equals(organizationId))
+                    .stream()
+                    .toList();
         }
 
         @Override

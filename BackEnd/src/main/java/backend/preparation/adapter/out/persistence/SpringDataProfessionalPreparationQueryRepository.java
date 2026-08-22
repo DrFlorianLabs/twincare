@@ -36,6 +36,10 @@ interface SpringDataProfessionalPreparationQueryRepository
                            confirmation.reviewedCaseRevision as reviewedCaseRevision,
                            confirmation.reviewedReasonRecordedAt as reviewedReasonRecordedAt,
                            confirmation.openTaskCount as confirmationOpenTaskCount,
+                           closure.closedByUserId as closedByUserId,
+                           closure.closedAt as closedAt,
+                           closure.readyCaseRevision as readyCaseRevision,
+                           closure.closedCaseRevision as closedCaseRevision,
                            case when attachment.id is null then false else true end as attachmentPresent,
                            preparationCase.version as revision,
                            preparationCase.updatedAt as updatedAt
@@ -46,6 +50,9 @@ interface SpringDataProfessionalPreparationQueryRepository
                     left join PreparationReadyConfirmationJpaEntity confirmation
                       on confirmation.preparationCaseId = preparationCase.id
                      and confirmation.organizationId = preparationCase.organizationId
+                    left join PreparationCaseClosureJpaEntity closure
+                      on closure.preparationCaseId = preparationCase.id
+                     and closure.organizationId = preparationCase.organizationId
                     where preparationCase.organizationId = :organizationId
                     order by case when preparationCase.scheduledAt is null then 1 else 0 end,
                              preparationCase.scheduledAt asc,
@@ -80,6 +87,10 @@ interface SpringDataProfessionalPreparationQueryRepository
                    confirmation.reviewedCaseRevision as reviewedCaseRevision,
                    confirmation.reviewedReasonRecordedAt as reviewedReasonRecordedAt,
                    confirmation.openTaskCount as confirmationOpenTaskCount,
+                   closure.closedByUserId as closedByUserId,
+                   closure.closedAt as closedAt,
+                   closure.readyCaseRevision as readyCaseRevision,
+                   closure.closedCaseRevision as closedCaseRevision,
                    preparationCase.patientReason as patientReason,
                    preparationCase.patientReasonProvenance as patientReasonProvenance,
                    preparationCase.patientReasonRecordedAt as patientReasonRecordedAt,
@@ -99,6 +110,9 @@ interface SpringDataProfessionalPreparationQueryRepository
             left join PreparationReadyConfirmationJpaEntity confirmation
               on confirmation.preparationCaseId = preparationCase.id
              and confirmation.organizationId = preparationCase.organizationId
+            left join PreparationCaseClosureJpaEntity closure
+              on closure.preparationCaseId = preparationCase.id
+             and closure.organizationId = preparationCase.organizationId
             where preparationCase.organizationId = :organizationId
               and preparationCase.id = :caseId
             """)

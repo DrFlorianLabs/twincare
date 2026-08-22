@@ -35,6 +35,14 @@ interface ProfessionalPreparationViewProjection {
 
     Integer getConfirmationOpenTaskCount();
 
+    Long getClosedByUserId();
+
+    Instant getClosedAt();
+
+    Long getReadyCaseRevision();
+
+    Long getClosedCaseRevision();
+
     String getPatientReason();
 
     ProvenanceType getPatientReasonProvenance();

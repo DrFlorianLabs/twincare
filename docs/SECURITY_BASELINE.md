@@ -62,6 +62,10 @@ For staff:
   context remains advisory and never replaces use-case authorization.
 - preparation audit access requires a dedicated clinician-only capability;
   assistants and administrative roles receive no audit access by default.
+- explicit preparation closure requires a dedicated clinician-only capability,
+  the exact ready-case revision and consistent readiness evidence;
+- closure revokes every remaining invitation and patient session in the same
+  transaction and stores only minimized immutable closure metadata.
 
 An object identifier, storage filename or UUID is **not** an authorization mechanism.
 
@@ -127,6 +131,11 @@ Pre-audit cases are explicitly marked as historically incomplete; no synthetic
 backfill may imply a chronology that cannot be proven. There is no audit
 deletion endpoint until retention, deletion, backup, restore and legal-hold
 rules have been formally approved.
+
+Closure evidence has no update or deletion endpoint. It contains only technical
+tenant/case scope, server-derived clinician identity, server time and the
+ready/closed revision chain. A failed closure audit append rolls back the case
+transition and every credential revocation.
 
 ## 7. AI / model boundary
 

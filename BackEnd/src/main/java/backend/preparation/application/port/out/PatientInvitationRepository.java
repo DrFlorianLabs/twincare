@@ -1,5 +1,6 @@
 package backend.preparation.application.port.out;
 
+import java.util.List;
 import java.util.Optional;
 
 import backend.preparation.domain.OrganizationId;
@@ -20,6 +21,10 @@ public interface PatientInvitationRepository {
             OrganizationId organizationId);
 
     Optional<PatientInvitation> findByTokenDigestForUpdate(TokenDigest tokenDigest);
+
+    List<PatientInvitation> findAllByCaseForUpdate(
+            PreparationCaseId preparationCaseId,
+            OrganizationId organizationId);
 
     Optional<PatientInvitationScope> findScopeByTokenDigest(TokenDigest tokenDigest);
 

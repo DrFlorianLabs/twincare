@@ -67,4 +67,18 @@ class PreparationAuditEventTest {
                 NOW, 7, Optional.empty()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void preparationClosureIsStaffOnlyAndContainsNoClinicalSubject() {
+        var event = PreparationAuditEvent.staff(
+                ORGANIZATION_ID, CASE_ID, PreparationAuditEventType.PREPARATION_CLOSED,
+                42, NOW, 9, Optional.empty());
+
+        assertThat(event.actorKind()).isEqualTo(PreparationAuditActorKind.STAFF);
+        assertThat(event.subject()).isEmpty();
+        assertThatThrownBy(() -> PreparationAuditEvent.patient(
+                ORGANIZATION_ID, CASE_ID, PreparationAuditEventType.PREPARATION_CLOSED,
+                NOW, 9, Optional.empty()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

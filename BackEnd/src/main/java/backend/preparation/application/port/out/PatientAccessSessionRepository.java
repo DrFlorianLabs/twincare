@@ -1,6 +1,7 @@
 package backend.preparation.application.port.out;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -25,6 +26,10 @@ public interface PatientAccessSessionRepository {
     Optional<PatientAccessSession> findByIdForUpdate(
             UUID id,
             PatientInvitationId invitationId,
+            PreparationCaseId preparationCaseId,
+            OrganizationId organizationId);
+
+    List<PatientAccessSession> findAllByCaseForUpdate(
             PreparationCaseId preparationCaseId,
             OrganizationId organizationId);
 

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -156,6 +157,13 @@ class ResolvePatientAccessSessionServiceTest {
         public Optional<PatientAccessSession> findByIdForUpdate(
                 UUID id,
                 PatientInvitationId invitationId,
+                PreparationCaseId preparationCaseId,
+                OrganizationId organizationId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<PatientAccessSession> findAllByCaseForUpdate(
                 PreparationCaseId preparationCaseId,
                 OrganizationId organizationId) {
             throw new UnsupportedOperationException();

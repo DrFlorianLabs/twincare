@@ -16,5 +16,6 @@ public enum PreparationAuditEventType {
     TASK_CREATED,
     TASK_COMPLETED,
     TASK_CANCELLED,
-    READY_CONFIRMED
+    READY_CONFIRMED,
+    PREPARATION_CLOSED
 }

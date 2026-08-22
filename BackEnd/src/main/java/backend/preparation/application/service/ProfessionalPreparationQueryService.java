@@ -16,6 +16,7 @@ import backend.preparation.application.port.in.ProfessionalPreparationViewResult
 import backend.preparation.application.port.in.ProfessionalReadyConfirmationResult;
 import backend.preparation.application.port.in.PreparationTaskResult;
 import backend.preparation.application.port.out.PreparationCaseCapability;
+import backend.preparation.application.port.out.ProfessionalPreparationClosureSnapshot;
 import backend.preparation.application.port.out.ProfessionalPreparationAuthorization;
 import backend.preparation.application.port.out.ProfessionalPreparationQueryRepository;
 import backend.preparation.application.port.out.ProfessionalReadyConfirmationSnapshot;
@@ -58,7 +59,9 @@ public final class ProfessionalPreparationQueryService implements
                                 snapshot.patientReasonRecordedAt(),
                                 snapshot.openTaskCount(),
                                 snapshot.readyConfirmation(),
-                                snapshot.revision()),
+                                snapshot.closure(),
+                                snapshot.revision(),
+                                snapshot.updatedAt()),
                         snapshot.openTaskCount(),
                         snapshot.attachmentPresent(),
                         snapshot.revision(),
@@ -84,7 +87,9 @@ public final class ProfessionalPreparationQueryService implements
                 snapshot.patientReason().map(value -> value.recordedAt()),
                 snapshot.openTaskCount(),
                 snapshot.readyConfirmation(),
-                snapshot.revision());
+                snapshot.closure(),
+                snapshot.revision(),
+                snapshot.updatedAt());
         var attachment = snapshot.attachment().map(value -> new ProfessionalAttachmentResult(
                 value.displayFilename(),
                 value.mediaType(),
@@ -132,9 +137,13 @@ public final class ProfessionalPreparationQueryService implements
             Optional<Instant> patientReasonRecordedAt,
             int openTaskCount,
             Optional<ProfessionalReadyConfirmationSnapshot> confirmation,
-            long caseRevision) {
+            Optional<ProfessionalPreparationClosureSnapshot> closure,
+            long caseRevision,
+            Instant caseUpdatedAt) {
+        validateClosureEvidence(caseStatus, confirmation, closure, caseRevision, caseUpdatedAt);
         return confirmation
                 .map(value -> {
+                    long expectedRevisionDistance = caseStatus.isTerminal() ? 2 : 1;
                     boolean synchronizedEvidence = openTaskCount == 0
                             && value.openTaskCount() == 0
                             && patientReasonPresent
@@ -142,8 +151,9 @@ public final class ProfessionalPreparationQueryService implements
                                     .filter(value.reviewedReasonRecordedAt()::equals)
                                     .isPresent()
                             && !value.confirmedAt().isBefore(value.reviewedReasonRecordedAt())
-                            && caseRevision > 0
-                            && value.reviewedCaseRevision() == caseRevision - 1;
+                            && caseRevision >= expectedRevisionDistance
+                            && value.reviewedCaseRevision()
+                                    == caseRevision - expectedRevisionDistance;
                     if (!synchronizedEvidence) {
                         throw new IllegalStateException("Readiness confirmation evidence is inconsistent");
                     }
@@ -160,6 +170,28 @@ public final class ProfessionalPreparationQueryService implements
                         patientReasonPresent,
                         openTaskCount,
                         false));
+    }
+
+    private void validateClosureEvidence(
+            PreparationCaseStatus caseStatus,
+            Optional<ProfessionalReadyConfirmationSnapshot> confirmation,
+            Optional<ProfessionalPreparationClosureSnapshot> closure,
+            long caseRevision,
+            Instant caseUpdatedAt) {
+        if (caseStatus != PreparationCaseStatus.CLOSED) {
+            if (closure.isPresent()) {
+                throw new IllegalStateException("Closure evidence is inconsistent");
+            }
+            return;
+        }
+        var evidence = closure.orElseThrow(
+                () -> new IllegalStateException("Closure evidence is missing"));
+        if (confirmation.isEmpty()
+                || evidence.closedCaseRevision() != caseRevision
+                || evidence.readyCaseRevision() != caseRevision - 1
+                || !evidence.closedAt().equals(caseUpdatedAt)) {
+            throw new IllegalStateException("Closure evidence is inconsistent");
+        }
     }
 
 }

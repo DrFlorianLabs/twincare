@@ -1157,6 +1157,7 @@ class PatientInvitationApiSecurityIntegrationTest {
                 .forEach(storageKey -> attachmentStorage.deleteFinal(new AttachmentStorageKey(storageKey)));
         jdbcTemplate.update("DELETE FROM preparation_audit_event");
         jdbcTemplate.update("DELETE FROM preparation_attachment");
+        jdbcTemplate.update("DELETE FROM preparation_case_closure");
         jdbcTemplate.update("DELETE FROM preparation_ready_confirmation");
         jdbcTemplate.update("DELETE FROM preparation_task");
         jdbcTemplate.update("DELETE FROM patient_access_session");

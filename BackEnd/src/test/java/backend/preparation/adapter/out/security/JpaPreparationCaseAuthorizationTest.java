@@ -56,7 +56,7 @@ class JpaPreparationCaseAuthorizationTest {
     }
 
     @Test
-    void medicalAssistantCannotConfirmReady() {
+    void medicalAssistantCannotConfirmReadyCloseOrReadAudit() {
         when(currentUser.getRole()).thenReturn(Role.ASSISTANT_MEDICAL);
         activeMembership(OrganizationMembershipRole.MEDICAL_ASSISTANT);
 
@@ -72,6 +72,10 @@ class JpaPreparationCaseAuthorizationTest {
         assertThatThrownBy(() -> authorization.requireAccess(
                 ORGANIZATION_ID,
                 PreparationCaseCapability.CONFIRM_READY_FOR_CONSULTATION))
+                .isInstanceOf(UnauthorizedActionException.class);
+        assertThatThrownBy(() -> authorization.requireAccess(
+                ORGANIZATION_ID,
+                PreparationCaseCapability.CLOSE_PREPARATION_CASE))
                 .isInstanceOf(UnauthorizedActionException.class);
         assertThatThrownBy(() -> authorization.requireAccess(
                 ORGANIZATION_ID,

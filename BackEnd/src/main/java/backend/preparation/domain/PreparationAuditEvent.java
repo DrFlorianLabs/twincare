@@ -44,7 +44,7 @@ public record PreparationAuditEvent(
             PreparationAuditActorKind actorKind,
             Optional<PreparationAuditSubject> subject) {
         boolean valid = switch (type) {
-            case PREPARATION_CREATED, READY_CONFIRMED ->
+            case PREPARATION_CREATED, READY_CONFIRMED, PREPARATION_CLOSED ->
                     actorKind == PreparationAuditActorKind.STAFF && subject.isEmpty();
             case INVITATION_ISSUED ->
                     actorKind == PreparationAuditActorKind.STAFF && hasSubject(subject, PreparationAuditSubjectType.INVITATION);
