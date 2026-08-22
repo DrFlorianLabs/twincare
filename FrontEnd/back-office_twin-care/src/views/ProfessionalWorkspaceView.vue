@@ -4,6 +4,11 @@ import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 
 import { clearProfessionalSession } from '../services/api'
 import {
+  createPreparationClosureExecutor,
+  PREPARATION_CLOSURE_OUTCOME
+} from '../services/preparationClosure'
+import {
+  closePreparationCase,
   closePreparationTask,
   confirmPreparationReady,
   createPreparationTask,
@@ -14,6 +19,7 @@ import {
 } from '../services/preparationService'
 import {
   blockerLabel,
+  canClosePreparationCase,
   formatBytes,
   formatDateTime,
   isPreparationCaseId,
@@ -49,8 +55,12 @@ const taskRequestId = ref(null)
 const taskSubmitting = ref(false)
 const taskActionId = ref('')
 const confirming = ref(false)
+const closureDialogOpen = ref(false)
+const closureSubmitting = ref(false)
+const closureError = ref('')
 const downloading = ref(false)
 const detailHeading = ref(null)
+const closureTrigger = ref(null)
 
 let contextController
 let listController
@@ -61,6 +71,7 @@ let listSequence = 0
 let viewSequence = 0
 let pendingFocusCaseId = ''
 let interactionEpoch = 0
+const executeCaseClosure = createPreparationClosureExecutor(closePreparationCase)
 
 const organizations = computed(() =>
   Array.isArray(context.value?.organizations)
@@ -93,6 +104,13 @@ const commandPolicy = computed(() => preparationCommandPolicy(preparation.value)
 const canConfirm = computed(() =>
   hasCapability('CONFIRM_READY_FOR_CONSULTATION')
   && commandPolicy.value.confirmReady
+)
+
+const canClose = computed(() =>
+  canClosePreparationCase(
+    preparation.value,
+    selectedOrganization.value?.capabilities
+  )
 )
 
 const taskLabelValid = computed(() => isPreparationTaskLabel(taskLabel.value))
@@ -133,6 +151,9 @@ function invalidateCaseScope() {
   taskSubmitting.value = false
   taskActionId.value = ''
   confirming.value = false
+  closureDialogOpen.value = false
+  closureSubmitting.value = false
+  closureError.value = ''
   downloading.value = false
   pendingFocusCaseId = ''
   resetTaskDraft()
@@ -387,6 +408,82 @@ async function confirmReady() {
     await refreshCurrent(scope, epoch)
   } finally {
     if (resultStillApplies(scope, epoch)) confirming.value = false
+  }
+}
+
+function requestCaseClosure() {
+  if (!canClose.value || closureSubmitting.value) return
+  closureError.value = ''
+  closureDialogOpen.value = true
+}
+
+async function focusAfterClosureDialog() {
+  await nextTick()
+  const trigger = closureTrigger.value?.$el || closureTrigger.value
+  if (canClose.value && typeof trigger?.focus === 'function' && !trigger.disabled) {
+    trigger.focus()
+    return
+  }
+  detailHeading.value?.focus()
+}
+
+async function updateClosureDialog(open) {
+  if (open) {
+    requestCaseClosure()
+    return
+  }
+  if (closureSubmitting.value) return
+  closureDialogOpen.value = false
+  closureError.value = ''
+  await focusAfterClosureDialog()
+}
+
+async function cancelCaseClosure() {
+  if (closureSubmitting.value) return
+  closureDialogOpen.value = false
+  closureError.value = ''
+  await focusAfterClosureDialog()
+}
+
+async function confirmCaseClosure() {
+  if (!closureDialogOpen.value || !canClose.value || closureSubmitting.value) return
+  const scope = currentScopeKey()
+  const epoch = interactionEpoch
+  const organizationId = selectedOrganizationId.value
+  const caseId = preparation.value.caseId
+  const revision = preparation.value.revision
+  closureSubmitting.value = true
+  closureError.value = ''
+  feedback.value = null
+  try {
+    const outcome = await executeCaseClosure({
+      scope,
+      organizationId,
+      caseId,
+      expectedRevision: revision,
+      stillApplies: () => resultStillApplies(scope, epoch),
+      refresh: async () => {
+        closureDialogOpen.value = false
+        await refreshCurrent(scope, epoch)
+      }
+    })
+    if (outcome === PREPARATION_CLOSURE_OUTCOME.STALE
+        || outcome === PREPARATION_CLOSURE_OUTCOME.ALREADY_RUNNING) return
+    closureDialogOpen.value = false
+    feedback.value = outcome === PREPARATION_CLOSURE_OUTCOME.CLOSED
+      ? { type: 'success', text: 'La préparation est clôturée.' }
+      : {
+          type: 'warning',
+          text: 'La préparation a changé depuis votre lecture. La vue a été actualisée sans relancer la clôture.'
+        }
+    await focusAfterClosureDialog()
+  } catch (error) {
+    if (await handleUnauthorized(error)) return
+    if (!resultStillApplies(scope, epoch)) return
+    if (await handleForbidden(error)) return
+    closureError.value = 'La clôture n’a pas pu être enregistrée. Vérifiez la situation avant de réessayer.'
+  } finally {
+    if (resultStillApplies(scope, epoch)) closureSubmitting.value = false
   }
 }
 
@@ -683,7 +780,8 @@ onBeforeUnmount(abortRequests)
                   </div>
 
                   <v-btn
-                    v-if="hasCapability('CONFIRM_READY_FOR_CONSULTATION')"
+                    v-if="hasCapability('CONFIRM_READY_FOR_CONSULTATION')
+                      && preparation.caseStatus !== 'READY_FOR_CONSULTATION'"
                     color="primary"
                     prepend-icon="mdi-check-decagram-outline"
                     :disabled="!canConfirm"
@@ -693,8 +791,74 @@ onBeforeUnmount(abortRequests)
                   >
                     Confirmer prête pour la consultation
                   </v-btn>
+
+                  <v-btn
+                    v-if="hasCapability('CLOSE_PREPARATION_CASE')"
+                    ref="closureTrigger"
+                    color="primary"
+                    variant="outlined"
+                    prepend-icon="mdi-archive-check-outline"
+                    :disabled="!canClose"
+                    :loading="closureSubmitting"
+                    class="mt-5 ml-sm-3"
+                    @click="requestCaseClosure"
+                  >
+                    Clôturer après la consultation
+                  </v-btn>
                 </v-card-text>
               </v-card>
+
+              <v-dialog
+                :model-value="closureDialogOpen"
+                max-width="34rem"
+                :persistent="closureSubmitting"
+                aria-labelledby="closure-dialog-title"
+                aria-describedby="closure-dialog-description"
+                @update:model-value="updateClosureDialog"
+              >
+                <v-card rounded="xl" :aria-busy="closureSubmitting">
+                  <v-card-title id="closure-dialog-title" class="px-5 pt-5">
+                    Clôturer cette préparation ?
+                  </v-card-title>
+                  <v-card-text class="px-5">
+                    <p id="closure-dialog-description">
+                      Confirmez uniquement après la consultation. Cette action termine la préparation
+                      et révoque les accès patient encore actifs.
+                    </p>
+                    <p
+                      v-if="closureSubmitting"
+                      class="text-body-2 text-medium-emphasis mt-4"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      Clôture en cours…
+                    </p>
+                    <v-alert
+                      v-if="closureError"
+                      type="error"
+                      variant="tonal"
+                      class="mt-4"
+                      role="alert"
+                    >
+                      {{ closureError }}
+                    </v-alert>
+                  </v-card-text>
+                  <v-card-actions class="px-5 pb-5">
+                    <v-spacer />
+                    <v-btn :disabled="closureSubmitting" @click="cancelCaseClosure">
+                      Revenir
+                    </v-btn>
+                    <v-btn
+                      color="primary"
+                      :loading="closureSubmitting"
+                      :disabled="!canClose"
+                      @click="confirmCaseClosure"
+                    >
+                      Confirmer la clôture
+                    </v-btn>
+                  </v-card-actions>
+                </v-card>
+              </v-dialog>
 
               <v-row>
                 <v-col cols="12" md="7">

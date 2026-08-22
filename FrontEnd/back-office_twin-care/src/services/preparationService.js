@@ -1,9 +1,10 @@
-import api from './api'
+import api from './api.js'
 import {
   filenameFromContentDisposition,
+  isPreparationCaseId,
   normalizeOrganizationId,
   safeDownloadFilename
-} from './preparationPresentation'
+} from './preparationPresentation.js'
 
 function segment(value) {
   return encodeURIComponent(String(value))
@@ -60,6 +61,19 @@ export async function closePreparationTask(organizationId, caseId, taskId, statu
 export async function confirmPreparationReady(organizationId, caseId, expectedRevision) {
   const response = await api.put(
     preparationPath(organizationId, `/${segment(caseId)}/ready-confirmation`),
+    { expectedRevision }
+  )
+  return response.data
+}
+
+export async function closePreparationCase(organizationId, caseId, expectedRevision) {
+  if (!isPreparationCaseId(caseId)
+      || !Number.isSafeInteger(expectedRevision)
+      || expectedRevision <= 0) {
+    throw new Error('Case closure input is invalid')
+  }
+  const response = await api.put(
+    preparationPath(organizationId, `/${segment(caseId)}/closure`),
     { expectedRevision }
   )
   return response.data

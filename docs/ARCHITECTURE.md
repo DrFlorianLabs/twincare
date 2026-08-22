@@ -262,6 +262,12 @@ no-op. Professional list and detail reads load and validate the tenant-scoped
 closure evidence; a closed status without the matching revision chain and
 timestamp fails closed. Reopening and automatic closure are outside V0.1.
 
+The professional client discovers the closure capability from server context
+and offers one explicit, human-confirmed action only for a trusted `READY`
+view. A revision conflict reloads the case but never retries the closure
+command automatically. Client capability checks improve the interface; the
+server use case remains the authorization boundary.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:
