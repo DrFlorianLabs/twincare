@@ -163,8 +163,36 @@ class ProfessionalPreparationCommandApiIntegrationTest {
                 .andExpect(jsonPath("$.revision").value(3))
                 .andExpect(jsonPath("$.readyConfirmation.confirmed").value(true))
                 .andExpect(jsonPath("$.readyConfirmation.reviewedCaseRevision").value(2));
+
+        mockMvc.perform(put(closureEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(physician))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedRevision\":3}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(jsonPath("$.caseStatus").value("CLOSED"))
+                .andExpect(jsonPath("$.revision").value(4))
+                .andExpect(jsonPath("$.readyCaseRevision").value(3));
+
+        mockMvc.perform(put(closureEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(physician))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedRevision\":3}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.revision").value(4));
+
+        mockMvc.perform(get(viewEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(physician)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.caseStatus").value("CLOSED"))
+                .andExpect(jsonPath("$.readiness.state").value("NOT_APPLICABLE"))
+                .andExpect(jsonPath("$.revision").value(4));
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM preparation_ready_confirmation WHERE preparation_case_id = ?",
+                Integer.class,
+                caseId)).isOne();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM preparation_case_closure WHERE preparation_case_id = ?",
                 Integer.class,
                 caseId)).isOne();
         assertThat(jdbcTemplate.queryForList(
@@ -175,7 +203,89 @@ class ProfessionalPreparationCommandApiIntegrationTest {
                 ORDER BY event_sequence
                 """,
                 String.class,
-                caseId)).containsExactly("TASK_CREATED", "TASK_COMPLETED", "READY_CONFIRMED");
+                caseId)).containsExactly(
+                        "TASK_CREATED", "TASK_COMPLETED", "READY_CONFIRMED", "PREPARATION_CLOSED");
+    }
+
+    @Test
+    void closureRevokesConsumedInvitationAndActivePatientSession() throws Exception {
+        UUID caseId = insertCase(ORGANIZATION_A, "READY_FOR_CONSULTATION", "Synthetic exact reason");
+        Instant confirmedAt = NOW.plusSeconds(60);
+        jdbcTemplate.update(
+                "UPDATE preparation_case SET updated_at = ?, version = 1 WHERE id = ?",
+                confirmedAt,
+                caseId);
+        jdbcTemplate.update(
+                """
+                INSERT INTO preparation_ready_confirmation (
+                    preparation_case_id, organization_id, confirmed_by_user_id, confirmed_at,
+                    rule_set_id, rule_set_version, reviewed_case_revision,
+                    reviewed_reason_recorded_at, open_task_count
+                ) VALUES (?, ?, ?, ?, 'CORE_PREPARATION', 1, 0, ?, 0)
+                """,
+                caseId, ORGANIZATION_A, physician.getId(), confirmedAt, NOW);
+        UUID invitationId = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                INSERT INTO patient_invitation (
+                    id, organization_id, preparation_case_id, purpose, token_key_id, token_digest,
+                    status, active_slot, issued_by_user_id, issued_at, expires_at,
+                    consumed_at, updated_at, version
+                ) VALUES (?, ?, ?, 'PREPARATION_CASE_ACCESS', 'test-key', ?,
+                    'CONSUMED', NULL, ?, ?, ?, ?, ?, 0)
+                """,
+                invitationId,
+                ORGANIZATION_A,
+                caseId,
+                "a".repeat(64),
+                physician.getId(),
+                NOW.minusSeconds(300),
+                NOW.plusSeconds(3600),
+                NOW.minusSeconds(120),
+                NOW.minusSeconds(120));
+        UUID sessionId = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                INSERT INTO patient_access_session (
+                    id, invitation_id, organization_id, preparation_case_id, scope,
+                    token_key_id, token_digest, issued_at, expires_at, version
+                ) VALUES (?, ?, ?, ?, 'PREPARATION_CASE_CONTRIBUTE',
+                    'test-key', ?, ?, ?, 0)
+                """,
+                sessionId,
+                invitationId,
+                ORGANIZATION_A,
+                caseId,
+                "b".repeat(64),
+                NOW.minusSeconds(120),
+                NOW.plusSeconds(3600));
+
+        mockMvc.perform(put(closureEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(physician))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedRevision\":1}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.caseStatus").value("CLOSED"))
+                .andExpect(jsonPath("$.revision").value(2));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM patient_invitation WHERE id = ?",
+                String.class,
+                invitationId)).isEqualTo("REVOKED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT revoked_at IS NOT NULL FROM patient_access_session WHERE id = ?",
+                Boolean.class,
+                sessionId)).isTrue();
+        assertThat(jdbcTemplate.queryForList(
+                """
+                SELECT event_type
+                FROM preparation_audit_event
+                WHERE preparation_case_id = ?
+                ORDER BY event_sequence
+                """,
+                String.class,
+                caseId)).containsExactly(
+                        "INVITATION_REVOKED", "PATIENT_ACCESS_REVOKED", "PREPARATION_CLOSED");
     }
 
     @Test
@@ -184,6 +294,11 @@ class ProfessionalPreparationCommandApiIntegrationTest {
         AppUtilisateur outsider = createUser("task-outsider@synthetic.invalid", Role.ASSISTANT_MEDICAL);
 
         mockMvc.perform(put(readyEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(assistant))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedRevision\":0}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put(closureEndpoint(ORGANIZATION_A, caseId))
                         .header("Authorization", bearerToken(assistant))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"expectedRevision\":0}"))
@@ -212,6 +327,11 @@ class ProfessionalPreparationCommandApiIntegrationTest {
                                 {"requestId":"%s","label":"Synthetic task"}
                                 """.formatted(UUID.randomUUID())))
                 .andExpect(status().isNotFound());
+        mockMvc.perform(put(closureEndpoint(ORGANIZATION_B, caseId))
+                        .header("Authorization", bearerToken(physician))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedRevision\":1}"))
+                .andExpect(status().isNotFound());
         mockMvc.perform(post(tasksEndpoint(ORGANIZATION_A, caseId))
                         .header("Authorization", bearerToken(physician))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -220,8 +340,25 @@ class ProfessionalPreparationCommandApiIntegrationTest {
         mockMvc.perform(put(readyEndpoint(ORGANIZATION_A, caseId))
                         .header("Authorization", bearerToken(physician))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"expectedRevision\":-1}"))
+                .content("{\"expectedRevision\":-1}"))
                 .andExpect(status().isBadRequest());
+        mockMvc.perform(put(closureEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(physician))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedRevision\":1}"))
+                .andExpect(status().isConflict())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
+        for (String invalidBody : List.of(
+                "{}",
+                "{\"expectedRevision\":null}",
+                "{\"expectedRevision\":0}",
+                "{\"expectedRevision\":-1}")) {
+            mockMvc.perform(put(closureEndpoint(ORGANIZATION_A, caseId))
+                            .header("Authorization", bearerToken(physician))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(invalidBody))
+                    .andExpect(status().isBadRequest());
+        }
     }
 
     @Test
@@ -302,6 +439,60 @@ class ProfessionalPreparationCommandApiIntegrationTest {
                 caseId)).isOne();
     }
 
+    @RepeatedTest(3)
+    void concurrentExactClosuresCreateOneProofAndOneAuditEvent() throws Exception {
+        UUID caseId = insertCase(
+                ORGANIZATION_A, "READY_FOR_CONSULTATION", "Synthetic exact reason");
+        Instant confirmedAt = NOW.plusSeconds(60);
+        jdbcTemplate.update(
+                "UPDATE preparation_case SET updated_at = ?, version = 1 WHERE id = ?",
+                confirmedAt,
+                caseId);
+        jdbcTemplate.update(
+                """
+                INSERT INTO preparation_ready_confirmation (
+                    preparation_case_id, organization_id, confirmed_by_user_id, confirmed_at,
+                    rule_set_id, rule_set_version, reviewed_case_revision,
+                    reviewed_reason_recorded_at, open_task_count
+                ) VALUES (?, ?, ?, ?, 'CORE_PREPARATION', 1, 0, ?, 0)
+                """,
+                caseId, ORGANIZATION_A, physician.getId(), confirmedAt, NOW);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> closeConcurrently(caseId, start));
+            var second = executor.submit(() -> closeConcurrently(caseId, start));
+            start.countDown();
+
+            assertThat(List.of(first.get(), second.get())).containsExactlyInAnyOrder(200, 200);
+        }
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM preparation_case_closure WHERE preparation_case_id = ?",
+                Integer.class,
+                caseId)).isOne();
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM preparation_audit_event
+                WHERE preparation_case_id = ? AND event_type = 'PREPARATION_CLOSED'
+                """,
+                Integer.class,
+                caseId)).isOne();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?",
+                Long.class,
+                caseId)).isEqualTo(2L);
+    }
+
+    private int closeConcurrently(UUID caseId, CountDownLatch start) throws Exception {
+        start.await();
+        return mockMvc.perform(put(closureEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(physician))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedRevision\":1}"))
+                .andReturn().getResponse().getStatus();
+    }
+
     private UUID insertCase(String organizationId, String status, String reason) {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update(
@@ -329,6 +520,7 @@ class ProfessionalPreparationCommandApiIntegrationTest {
 
     private void clearPreparationData() {
         jdbcTemplate.update("DELETE FROM preparation_audit_event");
+        jdbcTemplate.update("DELETE FROM preparation_case_closure");
         jdbcTemplate.update("DELETE FROM preparation_ready_confirmation");
         jdbcTemplate.update("DELETE FROM preparation_task");
         jdbcTemplate.update("DELETE FROM preparation_attachment");
@@ -375,6 +567,10 @@ class ProfessionalPreparationCommandApiIntegrationTest {
 
     private String readyEndpoint(String organizationId, UUID caseId) {
         return caseEndpoint(organizationId, caseId) + "/ready-confirmation";
+    }
+
+    private String closureEndpoint(String organizationId, UUID caseId) {
+        return caseEndpoint(organizationId, caseId) + "/closure";
     }
 
     private String viewEndpoint(String organizationId, UUID caseId) {

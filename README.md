@@ -55,6 +55,7 @@ Le suivi longitudinal des maladies chroniques reste un horizon produit ultérieu
 - [`docs/adr/0009-professional-context-discovery.md`](docs/adr/0009-professional-context-discovery.md) — découverte serveur des organisations et capacités cliniques du professionnel.
 - [`docs/adr/0010-professional-preparation-workspace.md`](docs/adr/0010-professional-preparation-workspace.md) — espace professionnel minimal, sans persistance locale de contenu clinique.
 - [`docs/adr/0011-append-only-preparation-audit.md`](docs/adr/0011-append-only-preparation-audit.md) — chronologie de préparation append-only, minimisée et protégée.
+- [`docs/adr/0012-explicit-preparation-case-closure.md`](docs/adr/0012-explicit-preparation-case-closure.md) — clôture médicale explicite, preuve immuable et révocation des accès patients.
 
 Les prototypes, captures et documents historiques présents dans `artifacts/` documentent l'origine du projet mais ne constituent pas la spécification fonctionnelle courante.
 

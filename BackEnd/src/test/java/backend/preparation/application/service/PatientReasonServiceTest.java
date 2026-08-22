@@ -226,6 +226,13 @@ class PatientReasonServiceTest {
         }
 
         @Override
+        public List<PatientInvitation> findAllByCaseForUpdate(
+                PreparationCaseId preparationCaseId,
+                OrganizationId organizationId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public Optional<PatientInvitationScope> findScopeByTokenDigest(TokenDigest tokenDigest) {
             throw new UnsupportedOperationException();
         }
@@ -294,6 +301,13 @@ class PatientReasonServiceTest {
                     session.issuedAt(),
                     session.expiresAt(),
                     session.revokedAt()));
+        }
+
+        @Override
+        public List<PatientAccessSession> findAllByCaseForUpdate(
+                PreparationCaseId preparationCaseId,
+                OrganizationId organizationId) {
+            throw new UnsupportedOperationException();
         }
 
         @Override

@@ -26,6 +26,7 @@ import backend.preparation.application.port.out.PreparationCaseCapability;
 import backend.preparation.application.port.out.ProfessionalPreparationAuthorization;
 import backend.preparation.application.port.out.ProfessionalPreparationListPageSnapshot;
 import backend.preparation.application.port.out.ProfessionalPreparationListSnapshot;
+import backend.preparation.application.port.out.ProfessionalPreparationClosureSnapshot;
 import backend.preparation.application.port.out.ProfessionalPreparationQueryRepository;
 import backend.preparation.application.port.out.ProfessionalPreparationViewSnapshot;
 import backend.preparation.application.port.out.ProfessionalReadyConfirmationSnapshot;
@@ -72,6 +73,7 @@ class ProfessionalPreparationQueryServiceTest {
                 Optional.of(NOW),
                 0,
                 Optional.empty(),
+                Optional.empty(),
                 false,
                 0,
                 NOW);
@@ -104,6 +106,7 @@ class ProfessionalPreparationQueryServiceTest {
                 Optional.empty(),
                 List.of(),
                 0,
+                Optional.empty(),
                 Optional.empty(),
                 0,
                 NOW.minusSeconds(60),
@@ -139,6 +142,7 @@ class ProfessionalPreparationQueryServiceTest {
                 List.of(),
                 0,
                 Optional.empty(),
+                Optional.empty(),
                 0,
                 NOW.minusSeconds(60),
                 NOW);
@@ -162,6 +166,7 @@ class ProfessionalPreparationQueryServiceTest {
                 Optional.empty(),
                 List.of(),
                 0,
+                Optional.empty(),
                 Optional.empty(),
                 0,
                 NOW.minusSeconds(60),
@@ -196,6 +201,7 @@ class ProfessionalPreparationQueryServiceTest {
                 List.of(),
                 0,
                 Optional.of(staleConfirmation),
+                Optional.empty(),
                 2,
                 NOW.minusSeconds(60),
                 NOW.plusSeconds(1));
@@ -227,9 +233,119 @@ class ProfessionalPreparationQueryServiceTest {
                 Optional.of(NOW),
                 0,
                 Optional.of(mismatchedConfirmation),
+                Optional.empty(),
                 false,
                 1,
                 NOW.plusSeconds(1));
+        when(repository.findPage(ORGANIZATION_ID, 0, 20))
+                .thenReturn(new ProfessionalPreparationListPageSnapshot(List.of(snapshot), 0, 20, 1, 1));
+
+        assertThatThrownBy(() -> service.list(
+                new ListProfessionalPreparationsCommand(ORGANIZATION_ID, 0, 20)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("inconsistent");
+    }
+
+    @Test
+    void closedCaseKeepsTheTwoStepConfirmationRevisionChainAndIsNotApplicable() {
+        var reason = PatientStatement.declaredByPatient("Synthetic exact reason", NOW);
+        var confirmation = new ProfessionalReadyConfirmationSnapshot(
+                42,
+                NOW.plusSeconds(1),
+                PreparationReadinessPolicy.CURRENT_RULE_SET_ID,
+                PreparationReadinessPolicy.CURRENT_RULE_SET_VERSION,
+                7,
+                NOW,
+                0);
+        var snapshot = new ProfessionalPreparationViewSnapshot(
+                CASE_ID,
+                new PatientReference("synthetic-patient"),
+                Optional.empty(),
+                Optional.of(NOW.plusSeconds(3600)),
+                PreparationCaseStatus.CLOSED,
+                Optional.of(reason),
+                Optional.empty(),
+                List.of(),
+                0,
+                Optional.of(confirmation),
+                Optional.of(new ProfessionalPreparationClosureSnapshot(
+                        42,
+                        NOW.plusSeconds(2),
+                        8,
+                        9)),
+                9,
+                NOW.minusSeconds(60),
+                NOW.plusSeconds(2));
+        when(repository.findView(ORGANIZATION_ID, CASE_ID)).thenReturn(Optional.of(snapshot));
+
+        var result = service.get(new GetProfessionalPreparationViewCommand(
+                ORGANIZATION_ID, CASE_ID));
+
+        assertThat(result.readiness().state()).isEqualTo(PreparationReadinessState.NOT_APPLICABLE);
+    }
+
+    @Test
+    void closedCaseWithoutClosureEvidenceFailsClosed() {
+        var reason = PatientStatement.declaredByPatient("Synthetic exact reason", NOW);
+        var confirmation = new ProfessionalReadyConfirmationSnapshot(
+                42,
+                NOW.plusSeconds(1),
+                PreparationReadinessPolicy.CURRENT_RULE_SET_ID,
+                PreparationReadinessPolicy.CURRENT_RULE_SET_VERSION,
+                7,
+                NOW,
+                0);
+        var snapshot = new ProfessionalPreparationViewSnapshot(
+                CASE_ID,
+                new PatientReference("synthetic-patient"),
+                Optional.empty(),
+                Optional.of(NOW.plusSeconds(3600)),
+                PreparationCaseStatus.CLOSED,
+                Optional.of(reason),
+                Optional.empty(),
+                List.of(),
+                0,
+                Optional.of(confirmation),
+                Optional.empty(),
+                9,
+                NOW.minusSeconds(60),
+                NOW.plusSeconds(2));
+        when(repository.findView(ORGANIZATION_ID, CASE_ID)).thenReturn(Optional.of(snapshot));
+
+        assertThatThrownBy(() -> service.get(
+                new GetProfessionalPreparationViewCommand(ORGANIZATION_ID, CASE_ID)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("missing");
+    }
+
+    @Test
+    void closureEvidenceWithAnotherCaseRevisionFailsClosed() {
+        var confirmation = new ProfessionalReadyConfirmationSnapshot(
+                42,
+                NOW.plusSeconds(1),
+                PreparationReadinessPolicy.CURRENT_RULE_SET_ID,
+                PreparationReadinessPolicy.CURRENT_RULE_SET_VERSION,
+                7,
+                NOW,
+                0);
+        var snapshot = new ProfessionalPreparationListSnapshot(
+                CASE_ID,
+                new PatientReference("synthetic-patient"),
+                Optional.empty(),
+                Optional.of(NOW.plusSeconds(3600)),
+                PreparationCaseStatus.CLOSED,
+                true,
+                Optional.of(NOW),
+                0,
+                Optional.of(confirmation),
+                Optional.of(new ProfessionalPreparationClosureSnapshot(
+                        42,
+                        NOW.plusSeconds(2),
+                        9,
+                        10)),
+                false,
+                9,
+                NOW.plusSeconds(2));
         when(repository.findPage(ORGANIZATION_ID, 0, 20))
                 .thenReturn(new ProfessionalPreparationListPageSnapshot(List.of(snapshot), 0, 20, 1, 1));
 

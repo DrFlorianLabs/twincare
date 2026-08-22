@@ -10,6 +10,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import backend.preparation.application.port.in.CreatePreparationCaseUseCase;
+import backend.preparation.application.port.in.ClosePreparationCaseUseCase;
 import backend.preparation.application.port.in.GetProfessionalContextUseCase;
 import backend.preparation.application.port.in.ListPreparationAuditEventsUseCase;
 import backend.preparation.application.port.in.PutPatientAttachmentUseCase;
@@ -24,6 +25,7 @@ import backend.preparation.application.port.out.PatientInvitationRepository;
 import backend.preparation.application.port.out.PreparationAuditEventReader;
 import backend.preparation.application.port.out.PreparationAuditEventStore;
 import backend.preparation.application.port.out.PreparationCaseAuthorization;
+import backend.preparation.application.port.out.PreparationCaseClosureRepository;
 import backend.preparation.application.port.out.PreparationCaseIdGenerator;
 import backend.preparation.application.port.out.PreparationCaseRepository;
 import backend.preparation.application.port.out.PreparationReadyConfirmationRepository;
@@ -38,6 +40,7 @@ import backend.preparation.application.port.out.ProfessionalPreparationAuthoriza
 import backend.preparation.application.port.out.SecureTokenDigester;
 import backend.preparation.application.port.out.SecureTokenGenerator;
 import backend.preparation.application.service.CreatePreparationCaseService;
+import backend.preparation.application.service.ClosePreparationCaseService;
 import backend.preparation.application.service.CommitStagedPatientAttachmentService;
 import backend.preparation.application.service.DeletePatientAttachmentService;
 import backend.preparation.application.service.DownloadProfessionalAttachmentService;
@@ -212,6 +215,29 @@ public class PreparationApplicationConfiguration {
                 new PreparationReadinessPolicy(),
                 preparationClock);
         return new TransactionalProfessionalPreparationCommands(service, service, service);
+    }
+
+    @Bean
+    ClosePreparationCaseUseCase closePreparationCaseUseCase(
+            ProfessionalPreparationAuthorization authorization,
+            PreparationCaseRepository preparationCases,
+            PreparationReadyConfirmationRepository confirmations,
+            PreparationTaskRepository tasks,
+            PatientInvitationRepository invitations,
+            PatientAccessSessionRepository accessSessions,
+            PreparationCaseClosureRepository closures,
+            PreparationAuditEventStore auditEvents,
+            Clock preparationClock) {
+        return new TransactionalClosePreparationCaseUseCase(new ClosePreparationCaseService(
+                authorization,
+                preparationCases,
+                confirmations,
+                tasks,
+                invitations,
+                accessSessions,
+                closures,
+                auditEvents,
+                preparationClock));
     }
 
     @Bean

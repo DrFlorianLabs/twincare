@@ -22,6 +22,7 @@ public record ProfessionalPreparationViewSnapshot(
         List<ProfessionalPreparationTaskSnapshot> tasks,
         int openTaskCount,
         Optional<ProfessionalReadyConfirmationSnapshot> readyConfirmation,
+        Optional<ProfessionalPreparationClosureSnapshot> closure,
         long revision,
         Instant createdAt,
         Instant updatedAt) {
@@ -39,6 +40,7 @@ public record ProfessionalPreparationViewSnapshot(
             throw new IllegalArgumentException("Open preparation task count is invalid");
         }
         Objects.requireNonNull(readyConfirmation, "Readiness confirmation container is required");
+        Objects.requireNonNull(closure, "Closure evidence container is required");
         if (revision < 0) {
             throw new IllegalArgumentException("Preparation case revision is invalid");
         }

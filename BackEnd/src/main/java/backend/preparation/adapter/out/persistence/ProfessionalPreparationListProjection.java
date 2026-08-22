@@ -37,6 +37,14 @@ interface ProfessionalPreparationListProjection {
 
     Integer getConfirmationOpenTaskCount();
 
+    Long getClosedByUserId();
+
+    Instant getClosedAt();
+
+    Long getReadyCaseRevision();
+
+    Long getClosedCaseRevision();
+
     Boolean getAttachmentPresent();
 
     Long getRevision();

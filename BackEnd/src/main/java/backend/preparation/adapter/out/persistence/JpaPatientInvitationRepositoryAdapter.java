@@ -1,5 +1,6 @@
 package backend.preparation.adapter.out.persistence;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -49,6 +50,17 @@ public class JpaPatientInvitationRepositoryAdapter implements PatientInvitationR
     public Optional<PatientInvitation> findByTokenDigestForUpdate(TokenDigest tokenDigest) {
         return repository.findByTokenKeyIdAndTokenDigest(tokenDigest.keyId(), tokenDigest.value())
                 .map(this::toDomain);
+    }
+
+    @Override
+    public List<PatientInvitation> findAllByCaseForUpdate(
+            PreparationCaseId preparationCaseId,
+            OrganizationId organizationId) {
+        return repository.findAllByPreparationCaseIdAndOrganizationIdOrderById(
+                        preparationCaseId.value(), organizationId.value())
+                .stream()
+                .map(this::toDomain)
+                .toList();
     }
 
     @Override

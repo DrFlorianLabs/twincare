@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 import backend.preparation.application.port.out.ProfessionalAttachmentSnapshot;
 import backend.preparation.application.port.out.ProfessionalPreparationListPageSnapshot;
 import backend.preparation.application.port.out.ProfessionalPreparationListSnapshot;
+import backend.preparation.application.port.out.ProfessionalPreparationClosureSnapshot;
 import backend.preparation.application.port.out.ProfessionalPreparationTaskSnapshot;
 import backend.preparation.application.port.out.ProfessionalPreparationQueryRepository;
 import backend.preparation.application.port.out.ProfessionalReadyConfirmationSnapshot;
@@ -78,6 +79,7 @@ public class JpaProfessionalPreparationQueryRepositoryAdapter
                 Optional.ofNullable(projection.getPatientReasonRecordedAt()),
                 Math.toIntExact(projection.getOpenTaskCount()),
                 confirmation(projection),
+                closure(projection),
                 Boolean.TRUE.equals(projection.getAttachmentPresent()),
                 projection.getRevision(),
                 projection.getUpdatedAt());
@@ -109,6 +111,7 @@ public class JpaProfessionalPreparationQueryRepositoryAdapter
                 taskProjections.stream().map(this::toTaskSnapshot).toList(),
                 Math.toIntExact(projection.getOpenTaskCount()),
                 confirmation(projection),
+                closure(projection),
                 projection.getRevision(),
                 projection.getCreatedAt(),
                 projection.getUpdatedAt());
@@ -152,6 +155,26 @@ public class JpaProfessionalPreparationQueryRepositoryAdapter
                         projection.getReviewedCaseRevision(),
                         projection.getReviewedReasonRecordedAt(),
                         projection.getConfirmationOpenTaskCount()));
+    }
+
+    private Optional<ProfessionalPreparationClosureSnapshot> closure(
+            ProfessionalPreparationListProjection projection) {
+        return Optional.ofNullable(projection.getClosedByUserId())
+                .map(actor -> new ProfessionalPreparationClosureSnapshot(
+                        actor,
+                        projection.getClosedAt(),
+                        projection.getReadyCaseRevision(),
+                        projection.getClosedCaseRevision()));
+    }
+
+    private Optional<ProfessionalPreparationClosureSnapshot> closure(
+            ProfessionalPreparationViewProjection projection) {
+        return Optional.ofNullable(projection.getClosedByUserId())
+                .map(actor -> new ProfessionalPreparationClosureSnapshot(
+                        actor,
+                        projection.getClosedAt(),
+                        projection.getReadyCaseRevision(),
+                        projection.getClosedCaseRevision()));
     }
 
     private Optional<AppointmentReference> optionalAppointmentReference(String value) {

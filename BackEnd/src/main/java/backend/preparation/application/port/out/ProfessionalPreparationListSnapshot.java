@@ -19,6 +19,7 @@ public record ProfessionalPreparationListSnapshot(
         Optional<Instant> patientReasonRecordedAt,
         int openTaskCount,
         Optional<ProfessionalReadyConfirmationSnapshot> readyConfirmation,
+        Optional<ProfessionalPreparationClosureSnapshot> closure,
         boolean attachmentPresent,
         long revision,
         Instant updatedAt) {
@@ -37,6 +38,7 @@ public record ProfessionalPreparationListSnapshot(
             throw new IllegalArgumentException("Preparation case evidence is invalid");
         }
         Objects.requireNonNull(readyConfirmation, "Readiness confirmation container is required");
+        Objects.requireNonNull(closure, "Closure evidence container is required");
         Objects.requireNonNull(updatedAt, "Preparation case update timestamp is required");
     }
 }

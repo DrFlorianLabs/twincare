@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -207,6 +208,107 @@ class PreparationAuditRollbackIntegrationTest {
         assertThat(countRegularStorageFiles()).isZero();
     }
 
+    @Test
+    void closureAndCredentialRevocationRollBackWhenAuditFails() throws Exception {
+        UUID caseId = UUID.randomUUID();
+        Instant reasonAt = NOW;
+        Instant confirmedAt = NOW.plusSeconds(60);
+        jdbcTemplate.update(
+                """
+                INSERT INTO preparation_case (
+                    id, organization_id, patient_reference, appointment_reference,
+                    status, patient_reason, patient_reason_provenance,
+                    patient_reason_recorded_at, created_at, updated_at, version
+                ) VALUES (?, ?, ?, ?, 'READY_FOR_CONSULTATION', ?,
+                    'PATIENT_DECLARED', ?, ?, ?, 1)
+                """,
+                caseId,
+                ORGANIZATION_ID,
+                "synthetic-closure-patient",
+                "synthetic-closure-appointment",
+                "Synthetic reason",
+                reasonAt,
+                NOW.minusSeconds(60),
+                confirmedAt);
+        jdbcTemplate.update(
+                """
+                INSERT INTO preparation_ready_confirmation (
+                    preparation_case_id, organization_id, confirmed_by_user_id, confirmed_at,
+                    rule_set_id, rule_set_version, reviewed_case_revision,
+                    reviewed_reason_recorded_at, open_task_count
+                ) VALUES (?, ?, ?, ?, 'CORE_PREPARATION', 1, 0, ?, 0)
+                """,
+                caseId,
+                ORGANIZATION_ID,
+                physician.getId(),
+                confirmedAt,
+                reasonAt);
+        UUID invitationId = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                INSERT INTO patient_invitation (
+                    id, organization_id, preparation_case_id, purpose,
+                    token_key_id, token_digest, status, active_slot,
+                    issued_by_user_id, issued_at, expires_at, consumed_at, updated_at, version
+                ) VALUES (?, ?, ?, 'PREPARATION_CASE_ACCESS', 'test-key', ?,
+                    'CONSUMED', NULL, ?, ?, ?, ?, ?, 0)
+                """,
+                invitationId,
+                ORGANIZATION_ID,
+                caseId,
+                "c".repeat(64),
+                physician.getId(),
+                NOW.minusSeconds(300),
+                NOW.plusSeconds(604800),
+                NOW.minusSeconds(120),
+                NOW.minusSeconds(120));
+        UUID sessionId = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                INSERT INTO patient_access_session (
+                    id, invitation_id, organization_id, preparation_case_id, scope,
+                    token_key_id, token_digest, issued_at, expires_at, version
+                ) VALUES (?, ?, ?, ?, 'PREPARATION_CASE_CONTRIBUTE',
+                    'test-key', ?, ?, ?, 0)
+                """,
+                sessionId,
+                invitationId,
+                ORGANIZATION_ID,
+                caseId,
+                "d".repeat(64),
+                NOW.minusSeconds(120),
+                NOW.plusSeconds(604800));
+
+        mockMvc.perform(put("/api/v1/organizations/" + ORGANIZATION_ID
+                        + "/preparation-cases/" + caseId + "/closure")
+                        .header("Authorization", bearerToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedRevision\":1}"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM preparation_case WHERE id = ?",
+                String.class,
+                caseId)).isEqualTo("READY_FOR_CONSULTATION");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM preparation_case_closure WHERE preparation_case_id = ?",
+                Integer.class,
+                caseId)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM patient_invitation WHERE id = ?",
+                String.class,
+                invitationId)).isEqualTo("CONSUMED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT revoked_at IS NULL FROM patient_access_session WHERE id = ?",
+                Boolean.class,
+                sessionId)).isTrue();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM preparation_audit_event WHERE preparation_case_id = ?",
+                Integer.class,
+                caseId)).isZero();
+    }
+
     private UUID insertCase(String status, String appointmentReference) {
         UUID caseId = UUID.randomUUID();
         Instant createdAt = Instant.now().minusSeconds(900);
@@ -240,6 +342,9 @@ class PreparationAuditRollbackIntegrationTest {
 
     private void clearData() {
         jdbcTemplate.update("DELETE FROM preparation_audit_event");
+        jdbcTemplate.update("DELETE FROM preparation_case_closure");
+        jdbcTemplate.update("DELETE FROM preparation_ready_confirmation");
+        jdbcTemplate.update("DELETE FROM preparation_task");
         jdbcTemplate.update("DELETE FROM preparation_attachment");
         jdbcTemplate.update("DELETE FROM patient_access_session");
         jdbcTemplate.update("DELETE FROM patient_invitation");

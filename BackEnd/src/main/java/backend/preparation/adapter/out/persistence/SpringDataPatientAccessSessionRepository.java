@@ -1,5 +1,6 @@
 package backend.preparation.adapter.out.persistence;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -77,6 +78,11 @@ interface SpringDataPatientAccessSessionRepository extends JpaRepository<Patient
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<PatientAccessSessionJpaEntity> findByInvitationId(UUID invitationId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    List<PatientAccessSessionJpaEntity> findAllByPreparationCaseIdAndOrganizationIdOrderById(
+            UUID preparationCaseId,
+            String organizationId);
 
     interface PatientAccessSessionScopeView {
         UUID getSessionId();

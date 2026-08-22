@@ -1,5 +1,6 @@
 package backend.preparation.adapter.out.persistence;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -28,6 +29,11 @@ interface SpringDataPatientInvitationRepository extends JpaRepository<PatientInv
     Optional<PatientInvitationJpaEntity> findByTokenKeyIdAndTokenDigest(
             String tokenKeyId,
             String tokenDigest);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    List<PatientInvitationJpaEntity> findAllByPreparationCaseIdAndOrganizationIdOrderById(
+            UUID preparationCaseId,
+            String organizationId);
 
     @Query("""
             select invitation.id as id,

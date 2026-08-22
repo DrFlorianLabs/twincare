@@ -77,7 +77,8 @@ Sprint 0 is complete when:
 ### Still required before real-patient pilot
 
 - Complete organisation/tenant authorization across every retained sensitive route.
-- Formal audit event model.
+- Formal audit event model — delivered after Sprint 0 through TC-007a; its
+  retention and operational policies remain open.
 - Threat model and penetration/security review.
 - HDS/deployment architecture and operational controls.
 - Retention/deletion policy and backup/restore tests.

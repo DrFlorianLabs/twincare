@@ -248,6 +248,20 @@ tenant-scoped, cursor-paginated and clinician-only. Historical cases are never
 given a fabricated history: the read model explicitly reports when coverage
 does not begin at creation.
 
+## 4.11 Explicit closure boundary
+
+Explicit case closure is defined in
+[`adr/0012-explicit-preparation-case-closure.md`](adr/0012-explicit-preparation-case-closure.md).
+It is a clinician-only transition from `READY_FOR_CONSULTATION` to `CLOSED`,
+guarded by the exact ready-case revision and the persisted readiness evidence.
+
+The case, its invitations and its patient sessions are locked in deterministic
+order. Closure state, immutable closure evidence, defensive credential
+revocation and minimized audit events share one transaction. Exact replay is a
+no-op. Professional list and detail reads load and validate the tenant-scoped
+closure evidence; a closed status without the matching revision chain and
+timestamp fails closed. Reopening and automatic closure are outside V0.1.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:
