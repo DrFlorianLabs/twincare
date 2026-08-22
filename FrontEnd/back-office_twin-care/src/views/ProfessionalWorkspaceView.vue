@@ -2,6 +2,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 
+import NewPreparationDialog from '../components/NewPreparationDialog.vue'
+import PatientInvitationDialog from '../components/PatientInvitationDialog.vue'
+import PreparationCaseActions from '../components/PreparationCaseActions.vue'
 import { clearProfessionalSession } from '../services/api'
 import {
   createPreparationClosureExecutor,
@@ -11,17 +14,29 @@ import {
   closePreparationCase,
   closePreparationTask,
   confirmPreparationReady,
+  createPreparationCase,
   createPreparationTask,
   downloadPreparationAttachment,
   getPreparation,
   getProfessionalContext,
+  issuePatientInvitation,
   listPreparations
 } from '../services/preparationService'
+import {
+  buildPatientInvitationLink,
+  copyPatientInvitationLink,
+  createPatientInvitationExecutor,
+  createPreparationCreationExecutor,
+  createPreparationRequestTracker,
+  patientPreparationBaseUrl,
+  PREPARATION_START_OUTCOME
+} from '../services/preparationStart'
 import {
   blockerLabel,
   canClosePreparationCase,
   formatBytes,
   formatDateTime,
+  isKnownPreparationCaseStatus,
   isPreparationCaseId,
   isPreparationTaskLabel,
   preparationCommandPolicy,
@@ -50,6 +65,18 @@ const viewLoading = ref(false)
 const viewError = ref('')
 const feedback = ref(null)
 
+const creationDialogOpen = ref(false)
+const creationSubmitting = ref(false)
+const creationError = ref('')
+const creationAmbiguous = ref(false)
+
+const invitationDialogOpen = ref(false)
+const invitationSubmitting = ref(false)
+const invitationError = ref('')
+const invitationLink = ref('')
+const invitationExpiresAt = ref('')
+const invitationCopied = ref(false)
+
 const taskLabel = ref('')
 const taskRequestId = ref(null)
 const taskSubmitting = ref(false)
@@ -69,9 +96,16 @@ let downloadController
 let contextSequence = 0
 let listSequence = 0
 let viewSequence = 0
+let creationEpoch = 0
 let pendingFocusCaseId = ''
 let interactionEpoch = 0
 const executeCaseClosure = createPreparationClosureExecutor(closePreparationCase)
+const executePreparationCreation = createPreparationCreationExecutor(createPreparationCase)
+const executePatientInvitation = createPatientInvitationExecutor(issuePatientInvitation)
+const creationRequests = createPreparationRequestTracker()
+const patientAppBaseUrl = patientPreparationBaseUrl(
+  import.meta.env?.VITE_PATIENT_PREPARATION_URL || ''
+)
 
 const organizations = computed(() =>
   Array.isArray(context.value?.organizations)
@@ -113,6 +147,16 @@ const canClose = computed(() =>
   )
 )
 
+const canCreatePreparation = computed(() =>
+  hasCapability('CREATE_PREPARATION_CASE')
+)
+
+const canIssueInvitation = computed(() =>
+  hasCapability('ISSUE_PATIENT_INVITATION')
+  && preparation.value?.caseStatus === 'CREATED'
+  && commandPolicy.value.trusted
+)
+
 const taskLabelValid = computed(() => isPreparationTaskLabel(taskLabel.value))
 
 function hasCapability(capability) {
@@ -141,6 +185,43 @@ function resetTaskDraft() {
   taskRequestId.value = null
 }
 
+function clearInvitationSecret() {
+  invitationLink.value = ''
+  invitationExpiresAt.value = ''
+  invitationCopied.value = false
+  invitationError.value = ''
+  invitationSubmitting.value = false
+}
+
+function closeInvitationDialog() {
+  invitationDialogOpen.value = false
+  clearInvitationSecret()
+}
+
+function updateInvitationDialog(open) {
+  if (!open && !invitationSubmitting.value) closeInvitationDialog()
+}
+
+function closeCreationDialog() {
+  if (creationSubmitting.value || creationAmbiguous.value) return
+  creationDialogOpen.value = false
+  creationError.value = ''
+  creationRequests.reset()
+}
+
+async function abandonPreparationCreation() {
+  if (creationSubmitting.value || !creationAmbiguous.value) return
+  const refreshed = await loadList()
+  if (!refreshed) {
+    creationError.value = 'La liste doit être actualisée avant d’abandonner cette demande incertaine.'
+    return
+  }
+  creationAmbiguous.value = false
+  creationDialogOpen.value = false
+  creationError.value = ''
+  creationRequests.reset()
+}
+
 function invalidateCaseScope() {
   interactionEpoch += 1
   viewSequence += 1
@@ -156,16 +237,23 @@ function invalidateCaseScope() {
   closureError.value = ''
   downloading.value = false
   pendingFocusCaseId = ''
+  closeInvitationDialog()
   resetTaskDraft()
   preparation.value = null
 }
 
 function invalidateOrganizationScope() {
+  creationEpoch += 1
   listSequence += 1
   listController?.abort()
   listLoading.value = false
   listError.value = ''
   pageData.value = emptyPage()
+  creationDialogOpen.value = false
+  creationSubmitting.value = false
+  creationError.value = ''
+  creationAmbiguous.value = false
+  creationRequests.reset()
   invalidateCaseScope()
 }
 
@@ -231,7 +319,7 @@ async function loadContext() {
 }
 
 async function loadList() {
-  if (!selectedOrganizationId.value) return
+  if (!selectedOrganizationId.value) return false
   const sequence = ++listSequence
   listController?.abort()
   listController = new AbortController()
@@ -244,14 +332,16 @@ async function loadList() {
       20,
       { signal: listController.signal }
     )
-    if (sequence !== listSequence) return
+    if (sequence !== listSequence) return false
     if (!Array.isArray(result?.content)) throw new Error('Preparation page is invalid')
     pageData.value = result
+    return true
   } catch (error) {
-    if (isCancelled(error) || sequence !== listSequence) return
-    if (await handleUnauthorized(error)) return
-    if (await handleForbidden(error)) return
+    if (isCancelled(error) || sequence !== listSequence) return false
+    if (await handleUnauthorized(error)) return false
+    if (await handleForbidden(error)) return false
     listError.value = 'Les préparations ne peuvent pas être chargées pour le moment.'
+    return false
   } finally {
     if (sequence === listSequence) listLoading.value = false
   }
@@ -306,6 +396,153 @@ async function refreshCurrent(scope, epoch) {
   if (!resultStillApplies(scope, epoch)) return
   const caseId = route.params.caseId
   await Promise.all([loadList(), caseId ? loadPreparation(caseId) : Promise.resolve()])
+}
+
+function openCreationDialog() {
+  if (!canCreatePreparation.value || creationSubmitting.value) return
+  creationError.value = ''
+  creationDialogOpen.value = true
+}
+
+function resetCreationRequest() {
+  if (!creationSubmitting.value && !creationAmbiguous.value) {
+    creationRequests.reset()
+  }
+}
+
+async function submitPreparationCreation(draft) {
+  if (!creationDialogOpen.value
+      || !canCreatePreparation.value
+      || creationSubmitting.value) return
+  const organizationId = selectedOrganizationId.value
+  const epoch = creationEpoch
+  let requestId
+  let requestDraft
+  try {
+    requestDraft = creationRequests.payload(draft)
+    requestId = creationRequests.current()
+  } catch {
+    creationError.value = 'La demande ne peut pas être sécurisée. Vérifiez les champs et utilisez un navigateur récent.'
+    return
+  }
+  creationSubmitting.value = true
+  creationError.value = ''
+  feedback.value = null
+  try {
+    const execution = await executePreparationCreation({
+      scope: `${organizationId}\u0000${requestId}`,
+      stillApplies: () => creationDialogOpen.value
+        && organizationId === selectedOrganizationId.value
+        && epoch === creationEpoch,
+      operationArguments: [organizationId, requestId, requestDraft]
+    })
+    if (execution.outcome !== PREPARATION_START_OUTCOME.COMPLETED) return
+    const result = execution.result
+    if (!isPreparationCaseId(result?.caseId)
+        || !isKnownPreparationCaseStatus(result?.status)) {
+      throw new Error('Preparation creation response is invalid')
+    }
+    creationAmbiguous.value = false
+    creationDialogOpen.value = false
+    creationRequests.reset()
+    page.value = 1
+    feedback.value = { type: 'success', text: 'La préparation a été créée.' }
+    await loadList()
+    if (organizationId !== selectedOrganizationId.value || epoch !== creationEpoch) return
+    pendingFocusCaseId = result.caseId
+    await router.push({ name: 'Preparations', params: { caseId: result.caseId } })
+  } catch (error) {
+    if (await handleUnauthorized(error)) return
+    if (organizationId !== selectedOrganizationId.value || epoch !== creationEpoch) return
+    if (await handleForbidden(error)) return
+    if (error?.response?.status === 400) {
+      creationAmbiguous.value = false
+      creationError.value = 'La référence ou la date de consultation a été refusée. Vérifiez les champs.'
+    } else if (professionalErrorKind(error) === 'CONFLICT') {
+      creationAmbiguous.value = false
+      creationError.value = 'La demande entre en conflit avec une préparation existante. La liste a été actualisée.'
+      await loadList()
+    } else {
+      creationRequests.markAmbiguous()
+      creationAmbiguous.value = true
+      creationError.value = 'Le résultat est incertain. Réessayez sans modifier les champs : TwinCare réutilisera la même demande.'
+    }
+  } finally {
+    if (organizationId === selectedOrganizationId.value && epoch === creationEpoch) {
+      creationSubmitting.value = false
+    }
+  }
+}
+
+function openInvitationDialog() {
+  if (!canIssueInvitation.value || invitationSubmitting.value) return
+  clearInvitationSecret()
+  invitationDialogOpen.value = true
+}
+
+async function issueInvitation() {
+  if (!invitationDialogOpen.value
+      || !canIssueInvitation.value
+      || invitationSubmitting.value) return
+  if (!patientAppBaseUrl) {
+    invitationError.value = 'L’adresse de l’interface patient doit être configurée avant de créer un lien.'
+    return
+  }
+  const scope = currentScopeKey()
+  const epoch = interactionEpoch
+  const organizationId = selectedOrganizationId.value
+  const caseId = preparation.value.caseId
+  invitationSubmitting.value = true
+  invitationError.value = ''
+  invitationCopied.value = false
+  try {
+    const execution = await executePatientInvitation({
+      scope,
+      stillApplies: () => invitationDialogOpen.value && resultStillApplies(scope, epoch),
+      operationArguments: [organizationId, caseId]
+    })
+    if (execution.outcome !== PREPARATION_START_OUTCOME.COMPLETED) return
+    const result = execution.result
+    const expiresAt = new Date(result?.expiresAt)
+    if (Number.isNaN(expiresAt.getTime())) {
+      throw new Error('Patient invitation expiry is invalid')
+    }
+    invitationLink.value = buildPatientInvitationLink(
+      patientAppBaseUrl,
+      result?.invitationToken
+    )
+    invitationExpiresAt.value = expiresAt.toISOString()
+  } catch (error) {
+    if (await handleUnauthorized(error)) return
+    if (!invitationDialogOpen.value || !resultStillApplies(scope, epoch)) return
+    if (await handleForbidden(error)) return
+    if (professionalErrorKind(error) === 'CONFLICT') {
+      closeInvitationDialog()
+      feedback.value = {
+        type: 'warning',
+        text: 'La préparation a changé : aucun nouveau lien n’a été relancé automatiquement.'
+      }
+      await refreshCurrent(scope, epoch)
+    } else {
+      invitationError.value = 'Le lien n’a pas pu être récupéré. Une nouvelle tentative explicite remplacera tout lien éventuellement créé.'
+    }
+  } finally {
+    if (invitationDialogOpen.value && resultStillApplies(scope, epoch)) {
+      invitationSubmitting.value = false
+    }
+  }
+}
+
+async function copyInvitation() {
+  if (!invitationLink.value || invitationSubmitting.value) return
+  invitationCopied.value = false
+  invitationError.value = ''
+  try {
+    await copyPatientInvitationLink(invitationLink.value, navigator.clipboard)
+    invitationCopied.value = true
+  } catch {
+    invitationError.value = 'Le presse-papiers est indisponible. Vérifiez les permissions du navigateur puis réessayez.'
+  }
 }
 
 async function submitTask() {
@@ -419,9 +656,8 @@ function requestCaseClosure() {
 
 async function focusAfterClosureDialog() {
   await nextTick()
-  const trigger = closureTrigger.value?.$el || closureTrigger.value
-  if (canClose.value && typeof trigger?.focus === 'function' && !trigger.disabled) {
-    trigger.focus()
+  if (canClose.value && typeof closureTrigger.value?.focusClose === 'function') {
+    closureTrigger.value.focusClose()
     return
   }
   detailHeading.value?.focus()
@@ -567,7 +803,12 @@ watch(taskLabel, () => {
 })
 
 onMounted(loadContext)
-onBeforeUnmount(abortRequests)
+onBeforeUnmount(() => {
+  creationEpoch += 1
+  creationRequests.reset()
+  abortRequests()
+  closeInvitationDialog()
+})
 </script>
 
 <template>
@@ -618,17 +859,28 @@ onBeforeUnmount(abortRequests)
             <p class="text-overline text-primary mb-1">File de préparation</p>
             <h1 class="text-h4 font-weight-bold">Consultations à préparer</h1>
           </div>
-          <v-select
-            :model-value="selectedOrganizationId"
-            :items="organizations"
-            item-title="displayName"
-            item-value="organizationId"
-            label="Organisation"
-            variant="outlined"
-            hide-details
-            class="organization-select"
-            @update:model-value="setSelectedOrganization"
-          />
+          <div class="workspace-actions">
+            <v-select
+              :model-value="selectedOrganizationId"
+              :items="organizations"
+              item-title="displayName"
+              item-value="organizationId"
+              label="Organisation"
+              variant="outlined"
+              hide-details
+              class="organization-select"
+              @update:model-value="setSelectedOrganization"
+            />
+            <v-btn
+              v-if="hasCapability('CREATE_PREPARATION_CASE')"
+              color="primary"
+              prepend-icon="mdi-calendar-plus"
+              :disabled="!canCreatePreparation"
+              @click="openCreationDialog"
+            >
+              Nouvelle préparation
+            </v-btn>
+          </div>
         </div>
 
         <v-alert
@@ -779,32 +1031,17 @@ onBeforeUnmount(abortRequests)
                     </v-chip>
                   </div>
 
-                  <v-btn
-                    v-if="hasCapability('CONFIRM_READY_FOR_CONSULTATION')
-                      && preparation.caseStatus !== 'READY_FOR_CONSULTATION'"
-                    color="primary"
-                    prepend-icon="mdi-check-decagram-outline"
-                    :disabled="!canConfirm"
-                    :loading="confirming"
-                    class="mt-5"
-                    @click="confirmReady"
-                  >
-                    Confirmer prête pour la consultation
-                  </v-btn>
-
-                  <v-btn
-                    v-if="hasCapability('CLOSE_PREPARATION_CASE')"
+                  <PreparationCaseActions
                     ref="closureTrigger"
-                    color="primary"
-                    variant="outlined"
-                    prepend-icon="mdi-archive-check-outline"
-                    :disabled="!canClose"
-                    :loading="closureSubmitting"
-                    class="mt-5 ml-sm-3"
-                    @click="requestCaseClosure"
-                  >
-                    Clôturer après la consultation
-                  </v-btn>
+                    :can-issue-invitation="canIssueInvitation"
+                    :can-confirm-ready="canConfirm"
+                    :can-close="canClose"
+                    :confirming-ready="confirming"
+                    :closing="closureSubmitting"
+                    @issue-invitation="openInvitationDialog"
+                    @confirm-ready="confirmReady"
+                    @close="requestCaseClosure"
+                  />
                 </v-card-text>
               </v-card>
 
@@ -859,6 +1096,19 @@ onBeforeUnmount(abortRequests)
                   </v-card-actions>
                 </v-card>
               </v-dialog>
+
+              <PatientInvitationDialog
+                :model-value="invitationDialogOpen"
+                :loading="invitationSubmitting"
+                :error="invitationError"
+                :link-ready="Boolean(invitationLink)"
+                :copied="invitationCopied"
+                :expires-at="invitationExpiresAt"
+                :configuration-available="Boolean(patientAppBaseUrl)"
+                @update:model-value="updateInvitationDialog"
+                @issue="issueInvitation"
+                @copy="copyInvitation"
+              />
 
               <v-row>
                 <v-col cols="12" md="7">
@@ -1009,6 +1259,17 @@ onBeforeUnmount(abortRequests)
           </v-col>
         </v-row>
       </template>
+
+      <NewPreparationDialog
+        :model-value="creationDialogOpen"
+        :loading="creationSubmitting"
+        :ambiguous="creationAmbiguous"
+        :error="creationError"
+        @update:model-value="value => !value && closeCreationDialog()"
+        @abandon="abandonPreparationCreation"
+        @draft-change="resetCreationRequest"
+        @submit="submitPreparationCreation"
+      />
     </v-container>
   </v-main>
 </template>
@@ -1039,6 +1300,13 @@ onBeforeUnmount(abortRequests)
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 1rem;
+}
+
+.workspace-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 1rem;
 }
 
@@ -1085,7 +1353,8 @@ onBeforeUnmount(abortRequests)
 @media (max-width: 959px) {
   .workspace-heading,
   .detail-heading,
-  .task-form {
+  .task-form,
+  .workspace-actions {
     align-items: stretch;
     flex-direction: column;
   }

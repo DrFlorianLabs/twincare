@@ -1,8 +1,8 @@
 package backend.preparation.adapter.out.persistence;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
-import java.time.Instant;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -14,7 +14,21 @@ import jakarta.persistence.LockModeType;
 
 interface SpringDataPreparationCaseRepository extends JpaRepository<PreparationCaseJpaEntity, UUID> {
 
+    @Query(value = """
+            SELECT id
+            FROM care_organization
+            WHERE id = :organizationId
+            FOR UPDATE
+            """, nativeQuery = true)
+    Optional<String> lockOrganizationForCaseCreation(@Param("organizationId") String organizationId);
+
     Optional<PreparationCaseJpaEntity> findByIdAndOrganizationId(UUID id, String organizationId);
+
+    Optional<PreparationCaseJpaEntity> findByOrganizationIdAndCreationRequestId(
+            String organizationId,
+            UUID creationRequestId);
+
+    boolean existsByOrganizationIdAndCreationRequestId(String organizationId, UUID creationRequestId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""

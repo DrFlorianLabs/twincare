@@ -6,6 +6,7 @@ import {
   canClosePreparationCase,
   filenameFromContentDisposition,
   formatBytes,
+  isKnownPreparationCaseStatus,
   isKnownReadiness,
   isPreparationCaseId,
   isPreparationTaskLabel,
@@ -36,6 +37,24 @@ test('case identifiers and task labels are validated without UTF-16 truncation',
   assert.equal(isPreparationCaseId('2f3de63b-692d-4c20----------c7ec01b95b21'), false)
   assert.equal(isPreparationTaskLabel('🩺'.repeat(240)), true)
   assert.equal(isPreparationTaskLabel('🩺'.repeat(241)), false)
+})
+
+test('case status validation accepts only the explicit workflow vocabulary', () => {
+  for (const status of [
+    'CREATED',
+    'PATIENT_STARTED',
+    'COLLECTING',
+    'READY_FOR_REVIEW',
+    'NEEDS_ACTION',
+    'READY_FOR_CONSULTATION',
+    'CLOSED',
+    'EXPIRED',
+    'CANCELLED'
+  ]) {
+    assert.equal(isKnownPreparationCaseStatus(status), true)
+  }
+  assert.equal(isKnownPreparationCaseStatus('UNKNOWN'), false)
+  assert.equal(isKnownPreparationCaseStatus(null), false)
 })
 
 function preparation(overrides = {}) {

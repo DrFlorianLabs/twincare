@@ -5,6 +5,10 @@ import {
   normalizeOrganizationId,
   safeDownloadFilename
 } from './preparationPresentation.js'
+import {
+  isCreationRequestId,
+  isNormalizedPreparationDraft
+} from './preparationStart.js'
 
 function segment(value) {
   return encodeURIComponent(String(value))
@@ -38,6 +42,27 @@ export async function getPreparation(organizationId, caseId, options = {}) {
   const response = await api.get(
     preparationPath(organizationId, `/${segment(caseId)}/preparation-view`),
     options
+  )
+  return response.data
+}
+
+export async function createPreparationCase(organizationId, requestId, draft) {
+  if (!isCreationRequestId(requestId) || !isNormalizedPreparationDraft(draft)) {
+    throw new Error('Preparation creation input is invalid')
+  }
+  const response = await api.post(preparationPath(organizationId), {
+    requestId,
+    ...draft
+  })
+  return response.data
+}
+
+export async function issuePatientInvitation(organizationId, caseId) {
+  if (!isPreparationCaseId(caseId)) {
+    throw new Error('Patient invitation input is invalid')
+  }
+  const response = await api.post(
+    preparationPath(organizationId, `/${segment(caseId)}/invitations`)
   )
   return response.data
 }

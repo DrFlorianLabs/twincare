@@ -12,6 +12,15 @@ const BLOCKERS = Object.freeze({
 })
 
 const TERMINAL_CASE_STATUSES = new Set(['CLOSED', 'EXPIRED', 'CANCELLED'])
+const PREPARATION_CASE_STATUSES = new Set([
+  'CREATED',
+  'PATIENT_STARTED',
+  'COLLECTING',
+  'READY_FOR_REVIEW',
+  'NEEDS_ACTION',
+  'READY_FOR_CONSULTATION',
+  ...TERMINAL_CASE_STATUSES
+])
 const TASK_CREATION_CASE_STATUSES = new Set(['COLLECTING', 'READY_FOR_REVIEW', 'NEEDS_ACTION'])
 
 const TASK_STATUS = Object.freeze({
@@ -64,6 +73,10 @@ export function isKnownReadiness(state) {
 export function isPreparationCaseId(value) {
   return typeof value === 'string'
     && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)
+}
+
+export function isKnownPreparationCaseStatus(value) {
+  return PREPARATION_CASE_STATUSES.has(value)
 }
 
 export function isPreparationTaskLabel(value) {

@@ -23,7 +23,10 @@ import jakarta.persistence.Version;
                         columnNames = { "organization_id", "appointment_reference" }),
                 @UniqueConstraint(
                         name = "uq_preparation_case_patient_schedule",
-                        columnNames = { "organization_id", "patient_reference", "scheduled_at" })
+                        columnNames = { "organization_id", "patient_reference", "scheduled_at" }),
+                @UniqueConstraint(
+                        name = "uq_preparation_case_creation_request",
+                        columnNames = { "organization_id", "creation_request_id" })
         })
 class PreparationCaseJpaEntity {
 
@@ -41,6 +44,12 @@ class PreparationCaseJpaEntity {
 
     @Column(name = "scheduled_at")
     private Instant scheduledAt;
+
+    @Column(name = "creation_request_id", updatable = false)
+    private UUID creationRequestId;
+
+    @Column(name = "creation_request_fingerprint", updatable = false, length = 64)
+    private String creationRequestFingerprint;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40, columnDefinition = "VARCHAR(40)")
@@ -75,6 +84,8 @@ class PreparationCaseJpaEntity {
             String patientReference,
             String appointmentReference,
             Instant scheduledAt,
+            UUID creationRequestId,
+            String creationRequestFingerprint,
             PreparationCaseStatus status,
             String patientReason,
             ProvenanceType patientReasonProvenance,
@@ -86,6 +97,8 @@ class PreparationCaseJpaEntity {
         this.patientReference = patientReference;
         this.appointmentReference = appointmentReference;
         this.scheduledAt = scheduledAt;
+        this.creationRequestId = creationRequestId;
+        this.creationRequestFingerprint = creationRequestFingerprint;
         this.status = status;
         this.patientReason = patientReason;
         this.patientReasonProvenance = patientReasonProvenance;
@@ -112,6 +125,14 @@ class PreparationCaseJpaEntity {
 
     Instant scheduledAt() {
         return scheduledAt;
+    }
+
+    UUID creationRequestId() {
+        return creationRequestId;
+    }
+
+    String creationRequestFingerprint() {
+        return creationRequestFingerprint;
     }
 
     PreparationCaseStatus status() {

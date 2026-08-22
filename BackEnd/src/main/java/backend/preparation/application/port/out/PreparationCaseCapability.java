@@ -1,6 +1,8 @@
 package backend.preparation.application.port.out;
 
 public enum PreparationCaseCapability {
+    CREATE_PREPARATION_CASE,
+    ISSUE_PATIENT_INVITATION,
     VIEW_PREPARATION,
     MANAGE_PREPARATION_TASKS,
     DOWNLOAD_ATTACHMENT,

@@ -23,6 +23,8 @@ import backend.preparation.application.port.out.PatientAccessSessionScope;
 import backend.preparation.application.port.out.PatientInvitationRepository;
 import backend.preparation.application.port.out.PatientInvitationScope;
 import backend.preparation.application.port.out.PreparationCaseRepository;
+import backend.preparation.application.port.out.PreparationCaseCreationFingerprint;
+import backend.preparation.application.port.out.StoredPreparationCaseCreation;
 import backend.preparation.domain.AppointmentReference;
 import backend.preparation.domain.OrganizationId;
 import backend.preparation.domain.PatientAccessSession;
@@ -169,6 +171,14 @@ class PatientReasonServiceTest {
         }
 
         @Override
+        public void add(
+                PreparationCase ignored,
+                UUID requestId,
+                PreparationCaseCreationFingerprint fingerprint) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public long update(PreparationCase candidate) {
             assertThat(candidate).isSameAs(preparationCase);
             updateCount++;
@@ -184,6 +194,13 @@ class PatientReasonServiceTest {
         public Optional<PreparationCase> findByIdForUpdate(PreparationCaseId id, OrganizationId organizationId) {
             operations.add("case");
             return findById(id, organizationId);
+        }
+
+        @Override
+        public Optional<StoredPreparationCaseCreation> findByCreationRequestId(
+                OrganizationId organizationId,
+                UUID requestId) {
+            return Optional.empty();
         }
 
         private boolean matches(PreparationCaseId id, OrganizationId organizationId) {

@@ -89,6 +89,8 @@ class PatientInvitationApiSecurityIntegrationTest {
     void setUp() {
         clearPreparationData();
         utilisateurRepository.deleteAll();
+        addOrganization(ORGANIZATION_A, "Synthetic practice A");
+        addOrganization(ORGANIZATION_B, "Synthetic practice B");
         physician = createUser("invitation-physician@synthetic.invalid", Role.MEDECIN);
         addMembership(ORGANIZATION_A, physician, "CLINICIAN", true);
     }
@@ -140,6 +142,21 @@ class PatientInvitationApiSecurityIntegrationTest {
                 .andExpect(status().isForbidden());
 
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM patient_invitation", Integer.class)).isZero();
+    }
+
+    @Test
+    void medicalAssistantCapabilityAllowsCaseCreationAndInvitationIssue() throws Exception {
+        AppUtilisateur assistant = createUser("invitation-assistant@synthetic.invalid", Role.ASSISTANT_MEDICAL);
+        addMembership(ORGANIZATION_A, assistant, "MEDICAL_ASSISTANT", true);
+
+        UUID caseId = createCase(ORGANIZATION_A, assistant, "appointment-assistant-capability");
+        IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, assistant);
+
+        assertThat(invitation.token()).hasSize(43);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM patient_invitation WHERE preparation_case_id = ?",
+                Integer.class,
+                caseId)).isOne();
     }
 
     @Test
@@ -1067,13 +1084,14 @@ class PatientInvitationApiSecurityIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "requestId": "%s",
                                   "patientReference": "synthetic-patient",
                                   "appointmentReference": "%s"
                                 }
-                                """.formatted(appointmentReference)))
+                                """.formatted(UUID.randomUUID(), appointmentReference)))
                 .andExpect(status().isCreated())
                 .andReturn();
-        return UUID.fromString(json(result).get("id").toString());
+        return UUID.fromString(json(result).get("caseId").toString());
     }
 
     private IssuedInvitation issueInvitation(String organizationId, UUID caseId, AppUtilisateur user) throws Exception {
@@ -1274,6 +1292,7 @@ class PatientInvitationApiSecurityIntegrationTest {
         jdbcTemplate.update("DELETE FROM patient_invitation");
         jdbcTemplate.update("DELETE FROM preparation_case");
         jdbcTemplate.update("DELETE FROM organization_membership");
+        jdbcTemplate.update("DELETE FROM care_organization");
     }
 
     private AppUtilisateur createUser(String email, Role role) {
@@ -1295,6 +1314,13 @@ class PatientInvitationApiSecurityIntegrationTest {
                 ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 UUID.randomUUID(), organizationId, user.getId(), role, active, Instant.now());
+    }
+
+    private void addOrganization(String organizationId, String displayName) {
+        jdbcTemplate.update(
+                "INSERT INTO care_organization (id, display_name) VALUES (?, ?)",
+                organizationId,
+                displayName);
     }
 
     private String bearerToken(AppUtilisateur user) {
