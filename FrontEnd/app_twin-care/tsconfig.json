@@ -1,8 +1,11 @@
 {
   "extends": "@vue/tsconfig/tsconfig.dom.json",
   "include": [
-    "src/**/*.vue",
-    "src/**/*.js",
+    "src/App.vue",
+    "src/main.js",
+    "src/security/**/*.js",
+    "src/services/patientAccessService.js",
+    "src/usecases/**/*.js",
     "src/**/*.d.ts"
   ],
   "exclude": [
