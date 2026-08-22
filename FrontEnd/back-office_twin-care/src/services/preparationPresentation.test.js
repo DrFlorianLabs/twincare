@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   blockerLabel,
+  canClosePreparationCase,
   filenameFromContentDisposition,
   formatBytes,
   isKnownReadiness,
@@ -110,6 +111,41 @@ test('command policy mirrors the supported deterministic workflow', () => {
     changeTaskStatus: false,
     confirmReady: false
   })
+})
+
+test('case closure policy requires the exact capability and a trusted ready revision', () => {
+  const ready = preparation({
+    revision: 5,
+    caseStatus: 'READY_FOR_CONSULTATION',
+    readyConfirmation: {
+      confirmed: true,
+      confirmedByUserId: 42,
+      confirmedAt: '2026-08-21T13:00:00Z',
+      ruleSetId: 'CORE_PREPARATION',
+      ruleSetVersion: 1,
+      reviewedCaseRevision: 4
+    },
+    readiness: {
+      ruleSetId: 'CORE_PREPARATION',
+      ruleSetVersion: 1,
+      state: 'READY',
+      blockers: [],
+      provenance: 'DERIVED_DETERMINISTIC'
+    }
+  })
+
+  assert.equal(canClosePreparationCase(ready, ['CLOSE_PREPARATION_CASE']), true)
+  assert.equal(canClosePreparationCase(ready, ['CLOSE_PREPARATION']), false)
+  assert.equal(canClosePreparationCase({ ...ready, revision: 0 }, ['CLOSE_PREPARATION_CASE']), false)
+  assert.equal(canClosePreparationCase({
+    ...ready,
+    readyConfirmation: { ...ready.readyConfirmation, reviewedCaseRevision: 3 }
+  }, ['CLOSE_PREPARATION_CASE']), false)
+  assert.equal(canClosePreparationCase({ ...ready, caseStatus: 'CLOSED' }, ['CLOSE_PREPARATION_CASE']), false)
+  assert.equal(canClosePreparationCase({
+    ...ready,
+    readiness: { ...ready.readiness, provenance: 'LLM_GENERATED' }
+  }, ['CLOSE_PREPARATION_CASE']), false)
 })
 
 test('unknown or inconsistent workflow responses disable every mutation', () => {

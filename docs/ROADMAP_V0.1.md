@@ -98,7 +98,7 @@ until every applicable gate is closed.
 - `TC-006d-b` — delivered: minimal professional worklist and preparation-view frontend ([PR #29](https://github.com/DrFlorianLabs/twincare-amont/pull/29)).
 - `TC-007a` — delivered: append-only, minimized preparation audit with atomic
   mutation coverage and protected, bounded clinician access ([PR #30](https://github.com/DrFlorianLabs/twincare-amont/pull/30)).
-- `TC-007b-a` — in progress: clinician-only backend closure, immutable closure
-  evidence and defensive revocation of remaining patient credentials.
-- `TC-007b-b` — next: explicit professional closure action consuming the
-  versioned backend contract, with conflict handling and no automatic retry.
+- `TC-007b-a` — delivered: clinician-only backend closure, immutable closure
+  evidence and defensive revocation of remaining patient credentials ([PR #31](https://github.com/DrFlorianLabs/twincare-amont/pull/31)).
+- `TC-007b-b` — delivered: explicit professional closure action consuming
+  the versioned backend contract, with conflict handling and no automatic retry ([PR #32](https://github.com/DrFlorianLabs/twincare-amont/pull/32)).

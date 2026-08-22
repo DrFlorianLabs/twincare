@@ -81,5 +81,7 @@ as a normal closure. Terminal status does not disable evidence validation.
 - A clinician membership referenced by closure evidence is deactivated rather
   than hard-deleted; the database explicitly restricts deletion so actor
   provenance cannot be orphaned.
-- Automatic closure, closure reasons, reopening, document deletion and the
-  professional button are separate concerns.
+- The professional action is delivered separately by TC-007b-b and consumes
+  this versioned contract without automatic retry.
+- Automatic closure, closure reasons, reopening and document deletion remain
+  separate concerns.

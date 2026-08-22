@@ -143,6 +143,28 @@ export function preparationCommandPolicy(view) {
   )
 }
 
+export function canClosePreparationCase(view, capabilities) {
+  const confirmation = view?.readyConfirmation
+  if (!Array.isArray(capabilities)
+      || !capabilities.includes('CLOSE_PREPARATION_CASE')
+      || !Number.isSafeInteger(view?.revision)
+      || view.revision <= 0
+      || confirmation?.ruleSetId !== 'CORE_PREPARATION'
+      || confirmation?.ruleSetVersion !== 1
+      || !Number.isSafeInteger(confirmation?.confirmedByUserId)
+      || confirmation.confirmedByUserId <= 0
+      || typeof confirmation?.confirmedAt !== 'string'
+      || Number.isNaN(Date.parse(confirmation.confirmedAt))
+      || confirmation?.reviewedCaseRevision !== view.revision - 1) {
+    return false
+  }
+
+  const policy = preparationCommandPolicy(view)
+  return policy.trusted
+    && view.caseStatus === 'READY_FOR_CONSULTATION'
+    && view.readiness?.state === 'READY'
+}
+
 function frozenCommandPolicy(trusted, createTask, changeTaskStatus, confirmReady) {
   return Object.freeze({ trusted, createTask, changeTaskStatus, confirmReady })
 }
