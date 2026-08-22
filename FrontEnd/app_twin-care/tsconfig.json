@@ -5,9 +5,12 @@
     "src/**/*.js",
     "src/**/*.d.ts"
   ],
+  "exclude": [
+    "src/**/*.test.js"
+  ],
   "compilerOptions": {
     "allowJs": true,
-    "checkJs": false,
+    "checkJs": true,
     "noEmit": true,
     "types": ["vite/client"],
     "baseUrl": ".",

@@ -74,6 +74,7 @@ public final class PatientSecurityResponses {
         response.setStatus(status.value());
         response.setHeader(HttpHeaders.CACHE_CONTROL, CacheControl.noStore().getHeaderValue());
         response.setHeader("Referrer-Policy", "no-referrer");
+        response.setHeader("X-Content-Type-Options", "nosniff");
         if (clearSession) {
             response.addHeader(HttpHeaders.SET_COOKIE, expiredSessionCookie().toString());
         }

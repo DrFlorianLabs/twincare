@@ -94,6 +94,8 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/patient-access/session")
                         .hasAuthority(PatientPreparationPrincipal.AUTHORITY)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/patient-access/reason")
+                        .hasAuthority(PatientPreparationPrincipal.AUTHORITY)
                         .requestMatchers(HttpMethod.PUT, "/api/v1/patient-access/reason")
                         .hasAuthority(PatientPreparationPrincipal.AUTHORITY)
                         .requestMatchers(

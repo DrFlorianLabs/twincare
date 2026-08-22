@@ -212,3 +212,29 @@ client contains no `v-html`, analytics, service worker or clinical-data cache.
 Patient reason, task labels, attachment names and read models stay in memory
 only and are discarded on logout, authorization loss or page close. Unknown
 readiness/blocker values fail closed and never enable a command.
+
+## 13. Patient browser client
+
+The V0.1 patient entry point accepts invitation credentials only from the URL
+fragment. It removes every fragment before the first API request and rejects a
+credential supplied in the query string, an ambiguous fragment or an invalid
+base64url shape. The patient page sets a `no-referrer` policy and contains no
+analytics, pixels, third-party scripts or service worker.
+
+The one-time invitation secret, session CSRF value and patient wording remain
+only in volatile JavaScript memory. They must never be written to
+`localStorage`, `sessionStorage`, browser caches, URLs or logs. Continuing access
+uses the server-issued `HttpOnly`, `Secure`, `SameSite=Strict` cookie scoped to
+the patient namespace. CSRF is refreshed from the authenticated session read
+after reload and sent only on explicit unsafe requests.
+
+The active patient application calls only `/api/v1/patient-access/**`; it does
+not use the historical account, chatbot or dossier endpoints. Patient reason
+resume revalidates the server-owned organization/case/session/invitation scope
+inside the application and persistence boundaries and returns no technical
+identifier. Every patient response and generic failure is `no-store`,
+`no-referrer` and `nosniff`.
+
+This browser hardening does not authorize real patient data. A strict deployed
+content-security policy, end-to-end deployment review and all remaining pilot
+gates still apply.

@@ -56,5 +56,8 @@ jobs:
       - name: Unit tests
         if: matrix.app == 'back-office'
         run: npm run test:unit
+      - name: Patient journey unit tests
+        if: matrix.app == 'patient'
+        run: npm test
       - name: Build
         run: npm run build

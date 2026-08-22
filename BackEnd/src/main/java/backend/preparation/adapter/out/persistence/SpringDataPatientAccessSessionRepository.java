@@ -1,5 +1,6 @@
 package backend.preparation.adapter.out.persistence;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -69,6 +70,51 @@ interface SpringDataPatientAccessSessionRepository extends JpaRepository<Patient
             @Param("preparationCaseId") UUID preparationCaseId,
             @Param("organizationId") String organizationId);
 
+    @Query("""
+            select preparationCase.patientReason as patientReason,
+                   preparationCase.patientReasonRecordedAt as patientReasonRecordedAt
+            from PatientAccessSessionJpaEntity session,
+                 PatientInvitationJpaEntity invitation,
+                 PreparationCaseJpaEntity preparationCase
+            where session.id = :sessionId
+              and session.invitationId = :invitationId
+              and session.preparationCaseId = :preparationCaseId
+              and session.organizationId = :organizationId
+              and session.scope = :scope
+              and session.issuedAt <= :readAt
+              and session.expiresAt = :sessionExpiresAt
+              and session.expiresAt > :readAt
+              and session.revokedAt is null
+              and invitation.id = session.invitationId
+              and invitation.organizationId = session.organizationId
+              and invitation.preparationCaseId = session.preparationCaseId
+              and invitation.status = :invitationStatus
+              and invitation.consumedAt = session.issuedAt
+              and invitation.expiresAt = session.expiresAt
+              and invitation.expiresAt > :readAt
+              and preparationCase.id = session.preparationCaseId
+              and preparationCase.organizationId = session.organizationId
+              and preparationCase.status in :contributionStatuses
+              and (
+                    preparationCase.patientReason is null
+                    or (
+                        preparationCase.patientReasonProvenance = :patientDeclaredProvenance
+                        and preparationCase.patientReasonRecordedAt <= :readAt
+                    )
+              )
+            """)
+    Optional<PatientReasonView> findReasonForActivePatientSession(
+            @Param("sessionId") UUID sessionId,
+            @Param("invitationId") UUID invitationId,
+            @Param("preparationCaseId") UUID preparationCaseId,
+            @Param("organizationId") String organizationId,
+            @Param("sessionExpiresAt") Instant sessionExpiresAt,
+            @Param("readAt") Instant readAt,
+            @Param("scope") String scope,
+            @Param("contributionStatuses") List<backend.preparation.domain.PreparationCaseStatus> contributionStatuses,
+            @Param("invitationStatus") backend.preparation.domain.PatientInvitationStatus invitationStatus,
+            @Param("patientDeclaredProvenance") backend.preparation.domain.ProvenanceType patientDeclaredProvenance);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<PatientAccessSessionJpaEntity> findByIdAndInvitationIdAndPreparationCaseIdAndOrganizationId(
             UUID id,
@@ -104,5 +150,11 @@ interface SpringDataPatientAccessSessionRepository extends JpaRepository<Patient
         java.time.Instant getExpiresAt();
 
         java.time.Instant getRevokedAt();
+    }
+
+    interface PatientReasonView {
+        String getPatientReason();
+
+        Instant getPatientReasonRecordedAt();
     }
 }

@@ -268,6 +268,34 @@ view. A revision conflict reloads the case but never retries the closure
 command automatically. Client capability checks improve the interface; the
 server use case remains the authorization boundary.
 
+## 4.12 Patient browser and reason-resume boundary
+
+The active V0.1 patient interface is a single-purpose preparation screen. It
+replaces the historical account/chatbot portal in the runtime entry point; the
+legacy sources may remain as historical artefacts but are not imported by the
+active application.
+
+The invitation secret is accepted only from an exact `#token=...` fragment and
+is removed with `history.replaceState` before the first API request. Query-string
+tokens, duplicate parameters and malformed fragments fail closed. The secret,
+patient session CSRF token and patient wording remain in memory only; the client
+uses neither `localStorage` nor `sessionStorage` and contains no analytics or
+third-party runtime call.
+
+Invitation exchange, cookie session restoration and reason write use the
+dedicated `/api/v1/patient-access/**` namespace. The patient-side resume read is
+defined in [`adr/0013-patient-reason-resume-read.md`](adr/0013-patient-reason-resume-read.md).
+It revalidates the full server-owned grant in one persistence query and returns
+only whether the current patient's statement exists, its exact text and its
+server timestamp. No tenant, case, patient or invitation identifier is accepted
+or returned.
+
+The browser never retries a reason mutation automatically. If a write fails,
+the draft remains only in volatile memory and a new attempt requires an explicit
+patient action. Network ambiguity during one-time invitation exchange is handled
+by trying the server cookie session before replaying the invitation. The useful
+core remains same-origin and provider-independent.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:

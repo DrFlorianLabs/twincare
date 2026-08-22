@@ -102,3 +102,6 @@ until every applicable gate is closed.
   evidence and defensive revocation of remaining patient credentials ([PR #31](https://github.com/DrFlorianLabs/twincare-amont/pull/31)).
 - `TC-007b-b` — delivered: explicit professional closure action consuming
   the versioned backend contract, with conflict handling and no automatic retry ([PR #32](https://github.com/DrFlorianLabs/twincare-amont/pull/32)).
+- `TC-008a` — in review: secure patient invitation entry, free-text reason and
+  server-backed resume in a minimal mobile interface; no chatbot, LLM or browser
+  persistence.
