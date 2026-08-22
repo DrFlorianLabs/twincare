@@ -1,76 +1,142 @@
-<template>
-  <v-app>
-    <v-navigation-drawer v-model="drawer" temporary width="300">
-      <div class="pa-6" style="background-color: #2A93D5; color: white; height: 180px;">
-        <v-avatar size="70" color="white" class="mb-4">
-          <v-img v-if="userPhoto" :src="userPhoto" cover />
-          <v-icon v-else size="55" color="#B0BEC5">mdi-account</v-icon>
-        </v-avatar>
-        <div class="text-h5 font-weight-bold text-capitalize" style="line-height: 1.2;">Bonjour<br>{{ userName }}</div>
-      </div>
+<script setup lang="ts">
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
-      <v-list class="pa-2 mt-2">
-        <v-list-item to="/preparation" prepend-icon="mdi-forum-outline" title="Préparer ma consultation" class="py-3">
-          <template #append><v-icon size="small">mdi-chevron-right</v-icon></template>
-        </v-list-item>
-        <v-list-item to="/mes-documents" prepend-icon="mdi-file-document-outline" title="Mes documents" class="py-3">
-          <template #append><v-icon size="small">mdi-chevron-right</v-icon></template>
-        </v-list-item>
-        <v-list-item to="/profil" prepend-icon="mdi-account-outline" title="Mon profil" class="py-3">
-          <template #append><v-icon size="small">mdi-chevron-right</v-icon></template>
-        </v-list-item>
-        <v-list-item to="/confidentialite" prepend-icon="mdi-lock-outline" title="Confidentialité" class="py-3">
-          <template #append><v-icon size="small">mdi-chevron-right</v-icon></template>
-        </v-list-item>
-      </v-list>
+import { createPatientAccessClient } from './services/patientAccessService.js'
+import {
+  createPatientPreparationJourney,
+  PatientJourneyPhase,
+} from './usecases/patientPreparationJourney.js'
 
-      <template #append>
-        <div class="pa-4">
-          <v-list-item prepend-icon="mdi-logout" title="Déconnexion" class="mb-4" @click="seDeconnecter" />
-          <v-btn block variant="outlined" color="red" rounded="lg" class="text-none font-weight-bold" href="tel:15">Urgence 15</v-btn>
-        </div>
-      </template>
-    </v-navigation-drawer>
+type InvitationCapture =
+  | { kind: 'NONE' }
+  | { kind: 'INVALID' }
+  | { kind: 'TOKEN'; token: string | null }
 
-    <v-main><router-view /></v-main>
-    <BarreNavigation v-if="!isLoginPage" />
-  </v-app>
-</template>
+const props = defineProps<{ invitationCapture: InvitationCapture }>()
 
-<script setup>
-import { computed, provide, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import BarreNavigation from './components/BarreNavigation.vue'
+const journey = createPatientPreparationJourney(createPatientAccessClient())
+const state = journey.state
+const statusHeading = ref<HTMLElement | null>(null)
+const formError = ref<HTMLElement | null>(null)
+const remainingCharacters = computed(() => 4_000 - state.draft.length)
+const canSave = computed(() => journey.canSave())
 
-const drawer = ref(false)
-const route = useRoute()
-const router = useRouter()
-const userName = ref('Patient')
-const userPhoto = ref(null)
+onMounted(() => journey.start(props.invitationCapture))
 
-const isLoginPage = computed(() => route.path === '/' || route.path === '/mot-de-passe-oublie')
+watch(
+  () => state.phase,
+  async () => {
+    await nextTick()
+    statusHeading.value?.focus()
+  },
+)
 
-watch(drawer, (isOpen) => {
-  if (!isOpen) return
-  const prenom = localStorage.getItem('prenom')
-  const nom = localStorage.getItem('nom')
-  if (prenom) userName.value = prenom + (nom ? ` ${nom.charAt(0)}.` : '')
-})
-
-function toggleDrawer() {
-  drawer.value = !drawer.value
-}
-provide('toggleDrawer', toggleDrawer)
-
-function seDeconnecter() {
-  localStorage.clear()
-  drawer.value = false
-  router.push('/')
-}
+watch(
+  () => state.formError,
+  async (message) => {
+    if (!message) return
+    await nextTick()
+    formError.value?.focus()
+  },
+)
 </script>
 
-<style>
-body {
-  background-color: #f4f9fd;
-}
-</style>
+<template>
+  <div class="page-shell">
+    <header class="brand" aria-label="TwinCare">
+      <span class="brand-mark" aria-hidden="true">T</span>
+      <span>TwinCare</span>
+    </header>
+
+    <main class="preparation-card">
+      <p class="eyebrow">Avant votre consultation</p>
+
+      <section v-if="state.phase === PatientJourneyPhase.LOADING" aria-live="polite">
+        <h1 ref="statusHeading" tabindex="-1">Préparation en cours d’ouverture</h1>
+        <p>Nous vérifions votre lien sécurisé.</p>
+        <p class="loading-text" role="status">Veuillez patienter…</p>
+      </section>
+
+      <section v-else-if="state.phase === PatientJourneyPhase.LINK_ERROR">
+        <h1 ref="statusHeading" tabindex="-1">Ce lien ne peut pas être utilisé</h1>
+        <p>
+          Il est peut-être expiré ou a déjà été utilisé. Demandez simplement un nouveau lien au
+          cabinet.
+        </p>
+      </section>
+
+      <section v-else-if="state.phase === PatientJourneyPhase.SESSION_EXPIRED">
+        <h1 ref="statusHeading" tabindex="-1">Votre accès a expiré</h1>
+        <p>Pour protéger vos informations, demandez un nouveau lien au cabinet.</p>
+      </section>
+
+      <section v-else-if="state.phase === PatientJourneyPhase.NETWORK_ERROR">
+        <h1 ref="statusHeading" tabindex="-1">La connexion n’a pas abouti</h1>
+        <p>Vérifiez votre connexion internet, puis réessayez.</p>
+        <button class="primary-button" type="button" @click="journey.retryConnection">
+          Réessayer
+        </button>
+      </section>
+
+      <section v-else-if="state.phase === PatientJourneyPhase.SAVED">
+        <h1 ref="statusHeading" tabindex="-1">Votre demande est enregistrée</h1>
+        <p>Elle sera disponible pour préparer votre consultation.</p>
+        <div class="saved-answer" aria-label="Votre demande enregistrée">
+          {{ state.savedReason }}
+        </div>
+        <button class="secondary-button" type="button" @click="journey.editReason">
+          Modifier ma demande
+        </button>
+      </section>
+
+      <form v-else @submit.prevent="journey.saveReason">
+        <h1 ref="statusHeading" tabindex="-1">Préparer ma consultation</h1>
+        <label for="consultation-reason">
+          En quelques mots, qu’aimeriez-vous aborder pendant cette consultation&nbsp;?
+        </label>
+        <p id="reason-help" class="field-help">Une ou deux phrases suffisent.</p>
+        <textarea
+          id="consultation-reason"
+          v-model="state.draft"
+          name="consultationReason"
+          rows="7"
+          maxlength="4000"
+          autocomplete="off"
+          aria-describedby="reason-help reason-counter"
+          :aria-invalid="Boolean(state.formError)"
+          :disabled="state.saving"
+        />
+        <p id="reason-counter" class="character-count">
+          {{ remainingCharacters.toLocaleString('fr-FR') }} caractères restants
+        </p>
+        <p
+          v-if="state.formError"
+          ref="formError"
+          class="error-message"
+          role="alert"
+          tabindex="-1"
+        >
+          {{ state.formError }}
+        </p>
+        <div class="actions">
+          <button
+            v-if="state.savedReason"
+            class="text-button"
+            type="button"
+            :disabled="state.saving"
+            @click="journey.cancelEdit"
+          >
+            Annuler
+          </button>
+          <button class="primary-button" type="submit" :disabled="!canSave">
+            {{ state.saving ? 'Enregistrement…' : 'Enregistrer' }}
+          </button>
+        </div>
+      </form>
+    </main>
+
+    <footer>
+      Vos informations restent limitées à la préparation de cette consultation.
+    </footer>
+  </div>
+</template>

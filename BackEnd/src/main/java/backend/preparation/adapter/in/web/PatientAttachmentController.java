@@ -81,6 +81,7 @@ public class PatientAttachmentController {
         return ResponseEntity.noContent()
                 .cacheControl(CacheControl.noStore())
                 .header("Referrer-Policy", "no-referrer")
+                .header("X-Content-Type-Options", "nosniff")
                 .build();
     }
 

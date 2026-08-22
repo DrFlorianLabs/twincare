@@ -317,6 +317,7 @@ class PatientInvitationApiSecurityIntegrationTest {
 
         patientLogout(firstSession, firstCsrf, "http://localhost:3000")
                 .andExpect(status().isNoContent())
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.allOf(
                         org.hamcrest.Matchers.containsString("tc_preparation_session="),
                         org.hamcrest.Matchers.containsString("Max-Age=0"),
@@ -335,6 +336,26 @@ class PatientInvitationApiSecurityIntegrationTest {
         IssuedInvitation invitation = issueInvitation(ORGANIZATION_A, caseId, physician);
         String sessionToken = exchangedSessionToken(invitation.token());
         String csrfToken = csrfFor(sessionToken);
+        long versionBeforeReason = jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId);
+
+        MvcResult initiallyAbsent = mockMvc.perform(get("/api/v1/patient-access/reason")
+                        .cookie(sessionCookie(sessionToken)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(header().string("Referrer-Policy", "no-referrer"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(jsonPath("$.present").value(false))
+                .andExpect(jsonPath("$.reason").doesNotExist())
+                .andExpect(jsonPath("$.recordedAt").doesNotExist())
+                .andReturn();
+        assertThat(initiallyAbsent.getResponse().getContentAsString())
+                .doesNotContain(caseId.toString(), ORGANIZATION_A, sessionToken);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId))
+                .isEqualTo(versionBeforeReason);
+        assertThat(auditTypes(caseId)).containsExactly(
+                "PREPARATION_CREATED", "INVITATION_ISSUED", "PATIENT_ACCESS_STARTED");
 
         patientReason(sessionToken, csrfToken, "http://localhost:3000", """
                 {"reason":"  Fatigue synthétique depuis trois semaines  "}
@@ -362,7 +383,91 @@ class PatientInvitationApiSecurityIntegrationTest {
                 "PATIENT_REASON_RECORDED");
 
         mockMvc.perform(get("/api/v1/patient-access/reason").cookie(sessionCookie(sessionToken)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(header().string("Referrer-Policy", "no-referrer"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(jsonPath("$.present").value(true))
+                .andExpect(jsonPath("$.reason").value("Fatigue synthétique depuis trois semaines"))
+                .andExpect(jsonPath("$.recordedAt").exists())
+                .andExpect(jsonPath("$.preparationCaseId").doesNotExist())
+                .andExpect(jsonPath("$.organizationId").doesNotExist())
+                .andExpect(jsonPath("$.provenance").doesNotExist());
+    }
+
+    @Test
+    void patientReasonReadIsBoundToTheServerIssuedOrganizationAndCaseScope() throws Exception {
+        addMembership(ORGANIZATION_B, physician, "CLINICIAN", true);
+        UUID caseInOrganizationA = createCase(
+                ORGANIZATION_A, physician, "appointment-patient-reason-read-org-a");
+        UUID caseInOrganizationB = createCase(
+                ORGANIZATION_B, physician, "appointment-patient-reason-read-org-b");
+        String sessionInOrganizationA = exchangedSessionToken(
+                issueInvitation(ORGANIZATION_A, caseInOrganizationA, physician).token());
+        String sessionInOrganizationB = exchangedSessionToken(
+                issueInvitation(ORGANIZATION_B, caseInOrganizationB, physician).token());
+        String reasonInOrganizationA = "Motif synthétique réservé au cabinet A";
+        String reasonInOrganizationB = "Motif synthétique réservé au cabinet B";
+
+        patientReason(
+                sessionInOrganizationA,
+                csrfFor(sessionInOrganizationA),
+                "http://localhost:3000",
+                "{\"reason\":\"%s\"}".formatted(reasonInOrganizationA))
+                .andExpect(status().isNoContent());
+        patientReason(
+                sessionInOrganizationB,
+                csrfFor(sessionInOrganizationB),
+                "http://localhost:3000",
+                "{\"reason\":\"%s\"}".formatted(reasonInOrganizationB))
+                .andExpect(status().isNoContent());
+
+        MvcResult organizationBRead = mockMvc.perform(get("/api/v1/patient-access/reason")
+                        .cookie(sessionCookie(sessionInOrganizationB)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.present").value(true))
+                .andExpect(jsonPath("$.reason").value(reasonInOrganizationB))
+                .andReturn();
+
+        assertThat(organizationBRead.getResponse().getContentAsString())
+                .doesNotContain(
+                        reasonInOrganizationA,
+                        caseInOrganizationA.toString(),
+                        ORGANIZATION_A,
+                        sessionInOrganizationA);
+    }
+
+    @Test
+    void patientReasonReadRejectsMissingJwtRevokedAndTerminalScopesUniformly() throws Exception {
+        UUID revokedCase = createCase(ORGANIZATION_A, physician, "appointment-patient-reason-read-revoked");
+        IssuedInvitation revokedInvitation = issueInvitation(ORGANIZATION_A, revokedCase, physician);
+        String revokedSession = exchangedSessionToken(revokedInvitation.token());
+        revokeInvitation(ORGANIZATION_A, revokedCase, revokedInvitation.id(), physician)
+                .andExpect(status().isNoContent());
+
+        UUID terminalCase = createCase(ORGANIZATION_A, physician, "appointment-patient-reason-read-terminal");
+        IssuedInvitation terminalInvitation = issueInvitation(ORGANIZATION_A, terminalCase, physician);
+        String terminalSession = exchangedSessionToken(terminalInvitation.token());
+        jdbcTemplate.update(
+                "UPDATE preparation_case SET status = 'CANCELLED', updated_at = ? WHERE id = ?",
+                Instant.now(), terminalCase);
+
+        List<MvcResult> failures = List.of(
+                mockMvc.perform(get("/api/v1/patient-access/reason")).andReturn(),
+                mockMvc.perform(get("/api/v1/patient-access/reason")
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(physician))).andReturn(),
+                mockMvc.perform(get("/api/v1/patient-access/reason")
+                        .cookie(sessionCookie(revokedSession))).andReturn(),
+                mockMvc.perform(get("/api/v1/patient-access/reason")
+                        .cookie(sessionCookie(terminalSession))).andReturn());
+
+        assertThat(failures).allSatisfy(result -> {
+            assertThat(result.getResponse().getStatus()).isEqualTo(401);
+            assertThat(result.getResponse().getContentAsString()).isEqualTo("Session patient indisponible");
+            assertThat(result.getResponse().getHeader("Cache-Control")).contains("no-store");
+            assertThat(result.getResponse().getHeader("Referrer-Policy")).isEqualTo("no-referrer");
+            assertThat(result.getResponse().getHeader("X-Content-Type-Options")).isEqualTo("nosniff");
+        });
     }
 
     @Test
@@ -608,7 +713,8 @@ class PatientInvitationApiSecurityIntegrationTest {
                 .isEqualTo(initialCaseRevision + 2);
 
         patientAttachmentDelete(sessionToken, csrfToken, "http://localhost:3000")
-                .andExpect(status().isNoContent());
+                .andExpect(status().isNoContent())
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"));
         patientAttachmentDelete(sessionToken, csrfToken, "http://localhost:3000")
                 .andExpect(status().isNoContent());
         assertThat(jdbcTemplate.queryForObject(
@@ -926,6 +1032,10 @@ class PatientInvitationApiSecurityIntegrationTest {
                     "http://localhost:3000",
                     "{\"reason\":\"%s\"}".formatted(patientReasonMarker))
                     .andExpect(status().isNoContent());
+            mockMvc.perform(get("/api/v1/patient-access/reason")
+                            .cookie(sessionCookie(sessionToken)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.reason").value(patientReasonMarker));
             patientAttachmentPut(
                     sessionToken,
                     csrfToken,

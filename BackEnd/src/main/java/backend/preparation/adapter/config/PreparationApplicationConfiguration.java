@@ -12,6 +12,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import backend.preparation.application.port.in.CreatePreparationCaseUseCase;
 import backend.preparation.application.port.in.ClosePreparationCaseUseCase;
 import backend.preparation.application.port.in.GetProfessionalContextUseCase;
+import backend.preparation.application.port.in.GetPatientReasonUseCase;
 import backend.preparation.application.port.in.ListPreparationAuditEventsUseCase;
 import backend.preparation.application.port.in.PutPatientAttachmentUseCase;
 import backend.preparation.application.port.in.ResolvePatientAccessSessionUseCase;
@@ -22,6 +23,7 @@ import backend.preparation.application.port.out.PatientAccessSessionRepository;
 import backend.preparation.application.port.out.PatientInvitationExchangeGuard;
 import backend.preparation.application.port.out.PatientInvitationIdGenerator;
 import backend.preparation.application.port.out.PatientInvitationRepository;
+import backend.preparation.application.port.out.PatientReasonReader;
 import backend.preparation.application.port.out.PreparationAuditEventReader;
 import backend.preparation.application.port.out.PreparationAuditEventStore;
 import backend.preparation.application.port.out.PreparationCaseAuthorization;
@@ -47,6 +49,7 @@ import backend.preparation.application.service.DownloadProfessionalAttachmentSer
 import backend.preparation.application.service.EndPatientAccessSessionService;
 import backend.preparation.application.service.ExchangePatientInvitationService;
 import backend.preparation.application.service.GetPatientAttachmentService;
+import backend.preparation.application.service.GetPatientReasonService;
 import backend.preparation.application.service.GetProfessionalContextService;
 import backend.preparation.application.service.IssuePatientInvitationService;
 import backend.preparation.application.service.ListPreparationAuditEventsService;
@@ -133,16 +136,19 @@ public class PreparationApplicationConfiguration {
             PreparationCaseRepository preparationCases,
             PatientInvitationRepository invitations,
             PatientAccessSessionRepository accessSessions,
+            PatientReasonReader patientReasons,
             SecureTokenDigester tokenDigester,
             PreparationAuditEventStore auditEvents,
             Clock preparationClock) {
         ResolvePatientAccessSessionUseCase resolve = new ResolvePatientAccessSessionService(
                 accessSessions, tokenDigester, preparationClock);
+        GetPatientReasonUseCase getPatientReason = new GetPatientReasonService(
+                patientReasons, preparationClock);
         var end = new EndPatientAccessSessionService(
                 preparationCases, invitations, accessSessions, auditEvents, preparationClock);
         var patientReason = new RecordPatientReasonService(
                 preparationCases, invitations, accessSessions, auditEvents, preparationClock);
-        return new TransactionalPatientSessionUseCases(resolve, end, patientReason);
+        return new TransactionalPatientSessionUseCases(resolve, end, getPatientReason, patientReason);
     }
 
     @Bean

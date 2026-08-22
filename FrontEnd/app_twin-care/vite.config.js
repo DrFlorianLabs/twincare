@@ -1,37 +1,29 @@
 import { fileURLToPath, URL } from 'node:url'
 import Vue from '@vitejs/plugin-vue'
-import Fonts from 'unplugin-fonts/vite'
-import { defineConfig } from 'vite'
-import Vuetify, { transformAssetUrls } from 'vite-plugin-vuetify'
+import { defineConfig, loadEnv } from 'vite'
 
-export default defineConfig({
-  plugins: [
-    Vue({
-      template: { transformAssetUrls },
-    }),
-    Vuetify({
-      autoImport: true,
-    }),
-    Fonts({
-      fontsource: {
-        families: [
-          {
-            name: 'Roboto',
-            weights: [100, 300, 400, 500, 700, 900],
-            styles: ['normal', 'italic'],
-          },
-        ],
+export default defineConfig(({ mode }) => {
+  const environment = loadEnv(mode, process.cwd(), '')
+  const developmentApiTarget = environment.VITE_DEV_API_TARGET?.trim()
+
+  return {
+    plugins: [Vue()],
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('src', import.meta.url)),
       },
-    }),
-  ],
-  define: { 'process.env': {} },
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('src', import.meta.url)),
+      extensions: ['.js', '.json', '.mjs', '.vue'],
     },
-    extensions: ['.js', '.json', '.jsx', '.mjs', '.vue'],
-  },
-  server: {
-    port: 3000,
-  },
+    server: {
+      port: 3000,
+      proxy: developmentApiTarget
+        ? {
+            '/api': {
+              target: developmentApiTarget,
+              changeOrigin: false,
+            },
+          }
+        : undefined,
+    },
+  }
 })

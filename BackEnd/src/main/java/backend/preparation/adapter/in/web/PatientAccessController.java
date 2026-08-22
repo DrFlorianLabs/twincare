@@ -21,6 +21,8 @@ import backend.preparation.application.port.in.ExchangePatientInvitationCommand;
 import backend.preparation.application.port.in.ExchangePatientInvitationUseCase;
 import backend.preparation.application.port.in.EndPatientAccessSessionCommand;
 import backend.preparation.application.port.in.EndPatientAccessSessionUseCase;
+import backend.preparation.application.port.in.GetPatientReasonCommand;
+import backend.preparation.application.port.in.GetPatientReasonUseCase;
 import backend.preparation.application.port.in.RecordPatientReasonCommand;
 import backend.preparation.application.port.in.RecordPatientReasonUseCase;
 import jakarta.validation.Valid;
@@ -33,6 +35,7 @@ public class PatientAccessController {
 
     private final ExchangePatientInvitationUseCase exchangeInvitation;
     private final EndPatientAccessSessionUseCase endSession;
+    private final GetPatientReasonUseCase getPatientReason;
     private final RecordPatientReasonUseCase recordPatientReason;
     private final PatientSecurityResponses securityResponses;
     private final boolean secureCookie;
@@ -40,11 +43,13 @@ public class PatientAccessController {
     public PatientAccessController(
             ExchangePatientInvitationUseCase exchangeInvitation,
             EndPatientAccessSessionUseCase endSession,
+            GetPatientReasonUseCase getPatientReason,
             RecordPatientReasonUseCase recordPatientReason,
             PatientSecurityResponses securityResponses,
             @Value("${app.preparation.patient-session-cookie-secure:true}") boolean secureCookie) {
         this.exchangeInvitation = exchangeInvitation;
         this.endSession = endSession;
+        this.getPatientReason = getPatientReason;
         this.recordPatientReason = recordPatientReason;
         this.securityResponses = securityResponses;
         this.secureCookie = secureCookie;
@@ -81,6 +86,20 @@ public class PatientAccessController {
                 .body(new PatientSessionResponse("ACTIVE", principal.grant().expiresAt()));
     }
 
+    @GetMapping("/reason")
+    public ResponseEntity<PatientReasonResponse> getReason(
+            @AuthenticationPrincipal PatientPreparationPrincipal principal) {
+        var result = getPatientReason.get(new GetPatientReasonCommand(principal.grant()));
+        PatientReasonResponse response = result.reason()
+                .map(reason -> PatientReasonResponse.present(reason.text(), reason.recordedAt()))
+                .orElseGet(PatientReasonResponse::absent);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header("Referrer-Policy", "no-referrer")
+                .header("X-Content-Type-Options", "nosniff")
+                .body(response);
+    }
+
     @PutMapping("/reason")
     public ResponseEntity<Void> recordReason(
             @AuthenticationPrincipal PatientPreparationPrincipal principal,
@@ -100,6 +119,7 @@ public class PatientAccessController {
                 .cacheControl(CacheControl.noStore())
                 .header(HttpHeaders.SET_COOKIE, securityResponses.expiredSessionCookie().toString())
                 .header("Referrer-Policy", "no-referrer")
+                .header("X-Content-Type-Options", "nosniff")
                 .build();
     }
 }
