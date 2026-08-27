@@ -73,6 +73,14 @@ For staff:
   request identifier and a server-persisted canonical payload fingerprint;
   exact replay creates neither a second case nor a second audit event, while a
   different payload fails closed.
+- the default runtime uses an explicit method-and-path allowlist and ends in
+  `denyAll`; no authenticated fallback can expose a newly mapped route.
+- prototype account administration, user, dossier, document, validation and
+  chatbot controllers are absent from the active Spring context behind an
+  inactive legacy profile. Representative routes are denied for every role,
+  including administrator, and interactive API documentation is disabled.
+- the legacy storage-recovery listener is absent from the active context and
+  cannot scan historical storage during default startup.
 
 An object identifier, storage filename or UUID is **not** an authorization mechanism.
 

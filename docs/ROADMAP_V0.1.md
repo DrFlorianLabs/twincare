@@ -105,6 +105,12 @@ until every applicable gate is closed.
 - `TC-008a` — delivered: secure patient invitation entry, free-text reason and
   server-backed resume in a minimal mobile interface; no chatbot, LLM or browser
   persistence ([PR #33](https://github.com/DrFlorianLabs/twincare-amont/pull/33)).
-- `TC-008b` — in review: idempotent manual professional creation and explicit
+- `TC-008b` — delivered: idempotent manual professional creation and explicit
   patient-link handoff, completing the provider-independent path between the
-  professional and patient interfaces.
+  professional and patient interfaces ([PR #34](https://github.com/DrFlorianLabs/twincare-amont/pull/34)).
+- `TC-SEC-01` — in progress ([issue #42](https://github.com/DrFlorianLabs/twincare-amont/issues/42)):
+  remove historical sensitive APIs and startup storage inspection from the
+  active runtime, with an explicit deny-by-default allowlist.
+- `TC-009a` — planned ([issue #41](https://github.com/DrFlorianLabs/twincare-amont/issues/41)):
+  minimal patient attachment interface over the existing private storage and
+  professional download boundaries.

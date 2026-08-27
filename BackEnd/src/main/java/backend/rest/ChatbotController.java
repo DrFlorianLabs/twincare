@@ -6,8 +6,10 @@ import backend.entity.InteractionChatbot;
 import backend.service.ChatbotSessionService;
 import jakarta.validation.Valid;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.*;
 
+@Profile("legacy-prototype")
 @RestController
 @RequestMapping("/api/chatbot")
 public class ChatbotController {

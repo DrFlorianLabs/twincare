@@ -5,8 +5,10 @@ import backend.entity.Validation;
 import backend.service.ValidationService;
 import jakarta.validation.Valid;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.*;
 
+@Profile("legacy-prototype")
 @RestController
 @RequestMapping("/api/validations")
 public class ValidationController {

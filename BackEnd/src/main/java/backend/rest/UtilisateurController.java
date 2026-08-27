@@ -2,6 +2,7 @@ package backend.rest;
 
 import java.util.List;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import backend.entity.AppUtilisateur;
 import backend.service.UtilisateurService;
 
+@Profile("legacy-prototype")
 @RestController
 @RequestMapping("/api/users")
 public class UtilisateurController {

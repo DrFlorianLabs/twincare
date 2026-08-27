@@ -321,6 +321,23 @@ clipboard remains outside TwinCare's clearing boundary and is described as
 confidential. No notification or appointment provider is required by the core
 workflow.
 
+## 4.14 Active V0.1 runtime boundary
+
+The active API surface is defined in
+[`adr/0015-active-v01-api-allowlist.md`](adr/0015-active-v01-api-allowlist.md).
+The default Spring context maps only the provider-independent V0.1 preparation
+controllers. Prototype account administration, user, dossier, document,
+validation and chatbot controllers remain source artefacts behind an inactive
+legacy profile. The historical storage reconciliation listener is excluded from
+the default context so it cannot inspect legacy storage on application startup.
+
+HTTP security uses an explicit method-and-path allowlist for professional login,
+professional context, organization-scoped preparation operations and the
+dedicated patient-access chain. Every other `/api/v1/**`, historical `/api/**`,
+interactive documentation and unmatched request fails closed. This routing
+barrier supplements rather than replaces authorization inside application use
+cases. Enabling a legacy profile is not a supported V0.1 deployment mode.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:
