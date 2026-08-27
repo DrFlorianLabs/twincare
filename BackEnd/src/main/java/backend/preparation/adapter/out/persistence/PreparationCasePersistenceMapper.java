@@ -1,6 +1,7 @@
 package backend.preparation.adapter.out.persistence;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import backend.preparation.domain.AppointmentReference;
 import backend.preparation.domain.OrganizationId;
@@ -12,6 +13,13 @@ import backend.preparation.domain.PreparationCaseId;
 final class PreparationCasePersistenceMapper {
 
     PreparationCaseJpaEntity toEntity(PreparationCase preparationCase) {
+        return toEntity(preparationCase, null, null);
+    }
+
+    PreparationCaseJpaEntity toEntity(
+            PreparationCase preparationCase,
+            UUID creationRequestId,
+            String creationRequestFingerprint) {
         Optional<PatientStatement> reason = preparationCase.patientReason();
         return new PreparationCaseJpaEntity(
                 preparationCase.id().value(),
@@ -19,6 +27,8 @@ final class PreparationCasePersistenceMapper {
                 preparationCase.patientReference().value(),
                 preparationCase.appointmentReference().map(AppointmentReference::value).orElse(null),
                 preparationCase.scheduledAt().orElse(null),
+                creationRequestId,
+                creationRequestFingerprint,
                 preparationCase.status(),
                 reason.map(PatientStatement::text).orElse(null),
                 reason.map(PatientStatement::provenance).orElse(null),

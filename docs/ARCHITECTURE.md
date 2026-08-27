@@ -296,6 +296,31 @@ patient action. Network ambiguity during one-time invitation exchange is handled
 by trying the server cookie session before replaying the invitation. The useful
 core remains same-origin and provider-independent.
 
+## 4.13 Manual professional start boundary
+
+The provider-independent professional start is defined in
+[`adr/0014-manual-professional-start-and-invitation-handoff.md`](adr/0014-manual-professional-start-and-invitation-handoff.md).
+Case creation accepts a required client-generated UUID request identifier. The
+backend stores a versioned canonical payload fingerprint under the unique
+organization/request pair: an exact replay returns the same case without a
+second audit event, while reuse with different input fails with a conflict.
+The database uniqueness boundary makes concurrent identical requests converge
+on one case.
+
+The professional client discovers separate create-case and issue-invitation
+capabilities from the server, but each application use case authorizes the
+authenticated active clinical membership again. Creation and invitation remain
+two explicit commands so a failed handoff can resume on the persisted case.
+
+The invitation link uses a configured absolute HTTPS patient-application URL;
+plain HTTP is accepted only for exact loopback development hosts. It places the
+one-time credential only in an exact `#token=...` fragment. The professional
+browser keeps it in volatile memory, copies it only after an explicit action and
+clears it on every relevant scope or session change. The operating-system
+clipboard remains outside TwinCare's clearing boundary and is described as
+confidential. No notification or appointment provider is required by the core
+workflow.
+
 ## 5. Provenance
 
 Every clinically relevant structured fact must retain provenance. Suggested categories:

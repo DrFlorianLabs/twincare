@@ -62,6 +62,12 @@ class JpaPreparationCaseAuthorizationTest {
 
         assertThat(authorization.requireAccess(
                 ORGANIZATION_ID,
+                PreparationCaseCapability.CREATE_PREPARATION_CASE)).isEqualTo(USER_ID);
+        assertThat(authorization.requireAccess(
+                ORGANIZATION_ID,
+                PreparationCaseCapability.ISSUE_PATIENT_INVITATION)).isEqualTo(USER_ID);
+        assertThat(authorization.requireAccess(
+                ORGANIZATION_ID,
                 PreparationCaseCapability.VIEW_PREPARATION)).isEqualTo(USER_ID);
         assertThat(authorization.requireAccess(
                 ORGANIZATION_ID,

@@ -15,8 +15,9 @@ import backend.preparation.application.port.out.PatientAccessSessionRepository;
 import backend.preparation.application.port.out.PatientInvitationIdGenerator;
 import backend.preparation.application.port.out.PatientInvitationRepository;
 import backend.preparation.application.port.out.PreparationAuditEventStore;
-import backend.preparation.application.port.out.PreparationCaseAuthorization;
+import backend.preparation.application.port.out.PreparationCaseCapability;
 import backend.preparation.application.port.out.PreparationCaseRepository;
+import backend.preparation.application.port.out.ProfessionalPreparationAuthorization;
 import backend.preparation.application.port.out.SecureTokenDigester;
 import backend.preparation.application.port.out.SecureTokenGenerator;
 import backend.preparation.domain.PatientInvitation;
@@ -32,7 +33,7 @@ public final class IssuePatientInvitationService implements IssuePatientInvitati
 
     private static final Duration MAXIMUM_TTL = Duration.ofDays(7);
 
-    private final PreparationCaseAuthorization authorization;
+    private final ProfessionalPreparationAuthorization authorization;
     private final PreparationCaseRepository preparationCases;
     private final PatientInvitationRepository invitations;
     private final PatientAccessSessionRepository accessSessions;
@@ -44,7 +45,7 @@ public final class IssuePatientInvitationService implements IssuePatientInvitati
     private final Duration invitationTtl;
 
     public IssuePatientInvitationService(
-            PreparationCaseAuthorization authorization,
+            ProfessionalPreparationAuthorization authorization,
             PreparationCaseRepository preparationCases,
             PatientInvitationRepository invitations,
             PatientAccessSessionRepository accessSessions,
@@ -69,7 +70,8 @@ public final class IssuePatientInvitationService implements IssuePatientInvitati
     @Override
     public IssuePatientInvitationResult issue(IssuePatientInvitationCommand command) {
         Objects.requireNonNull(command, "Patient invitation command is required");
-        long actorId = authorization.requireStaffAccess(command.organizationId());
+        long actorId = authorization.requireAccess(
+                command.organizationId(), PreparationCaseCapability.ISSUE_PATIENT_INVITATION);
         PreparationCase preparationCase = preparationCases
                 .findByIdForUpdate(command.preparationCaseId(), command.organizationId())
                 .orElseThrow(PreparationCaseNotFoundException::new);

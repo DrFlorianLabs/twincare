@@ -21,6 +21,8 @@ final class PreparationCapabilityPolicy {
         boolean clinicalMembership = membershipRole == OrganizationMembershipRole.CLINICIAN
                 || membershipRole == OrganizationMembershipRole.MEDICAL_ASSISTANT;
         if (clinicalPlatformRole && clinicalMembership) {
+            capabilities.add(PreparationCaseCapability.CREATE_PREPARATION_CASE);
+            capabilities.add(PreparationCaseCapability.ISSUE_PATIENT_INVITATION);
             capabilities.add(PreparationCaseCapability.VIEW_PREPARATION);
             capabilities.add(PreparationCaseCapability.MANAGE_PREPARATION_TASKS);
             capabilities.add(PreparationCaseCapability.DOWNLOAD_ATTACHMENT);

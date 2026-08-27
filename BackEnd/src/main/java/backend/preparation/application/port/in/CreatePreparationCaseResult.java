@@ -10,5 +10,6 @@ public record CreatePreparationCaseResult(
         PreparationCaseId id,
         OrganizationId organizationId,
         PreparationCaseStatus status,
-        Instant createdAt) {
+        Instant createdAt,
+        boolean created) {
 }

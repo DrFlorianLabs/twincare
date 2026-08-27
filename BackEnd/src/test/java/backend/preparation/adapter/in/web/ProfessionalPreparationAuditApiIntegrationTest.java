@@ -145,7 +145,11 @@ class ProfessionalPreparationAuditApiIntegrationTest {
     @Test
     void newCaseCreationAndItsFirstAuditEventArePersistedTogether() throws Exception {
         String body = """
-                {"patientReference":"synthetic-audit-patient","appointmentReference":"synthetic-audit-appointment"}
+                {
+                  "requestId":"74c8e2bb-45c9-4482-8103-0ec59bcf5040",
+                  "patientReference":"synthetic-audit-patient",
+                  "appointmentReference":"synthetic-audit-appointment"
+                }
                 """;
         String response = mockMvc.perform(post("/api/v1/organizations/" + ORGANIZATION_A + "/preparation-cases")
                         .header("Authorization", bearerToken(physician))
@@ -153,7 +157,7 @@ class ProfessionalPreparationAuditApiIntegrationTest {
                         .content(body))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        UUID caseId = UUID.fromString(objectMapper.readTree(response).get("id").asText());
+        UUID caseId = UUID.fromString(objectMapper.readTree(response).get("caseId").asText());
 
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM preparation_audit_event WHERE preparation_case_id = ?",

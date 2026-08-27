@@ -66,6 +66,13 @@ For staff:
   the exact ready-case revision and consistent readiness evidence;
 - closure revokes every remaining invitation and patient session in the same
   transaction and stores only minimized immutable closure metadata.
+- professional case creation and invitation issuance require distinct
+  server-derived capabilities for an active clinician or medical assistant;
+  the client never supplies the actor, role or organization membership.
+- case creation is idempotent within one organization through a required UUID
+  request identifier and a server-persisted canonical payload fingerprint;
+  exact replay creates neither a second case nor a second audit event, while a
+  different payload fails closed.
 
 An object identifier, storage filename or UUID is **not** an authorization mechanism.
 
@@ -212,6 +219,23 @@ client contains no `v-html`, analytics, service worker or clinical-data cache.
 Patient reason, task labels, attachment names and read models stay in memory
 only and are discarded on logout, authorization loss or page close. Unknown
 readiness/blocker values fail closed and never enable a command.
+
+The manual creation client generates an unpredictable UUID and captures the
+exact normalized payload for one unchanged draft. It retains both only in memory
+for an explicit retry after an ambiguous failure. It never retries creation or
+invitation automatically. An ambiguous
+creation cannot be silently closed and restarted with a new request identifier;
+the user must retry the unchanged request or explicitly abandon it after
+successfully refreshing the list. A failed or stale refresh preserves the
+request identifier. The configured patient-application URL must be absolute
+HTTPS without credentials, query or fragment; HTTP is restricted to exact
+local loopback development hosts. The invitation secret is added only as an
+exact URL fragment, remains in volatile memory, is copied only on explicit
+action and is cleared when its dialog, case, organization or professional
+session is invalidated. It must not enter the professional route, browser
+storage, logs, analytics or an automatic notification request. TwinCare cannot
+erase a user-requested operating-system clipboard copy and labels the copied
+link as confidential.
 
 ## 13. Patient browser client
 

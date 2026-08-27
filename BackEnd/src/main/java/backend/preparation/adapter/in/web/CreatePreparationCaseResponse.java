@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record CreatePreparationCaseResponse(
-        UUID id,
+        UUID caseId,
         String status,
         Instant createdAt) {
 }

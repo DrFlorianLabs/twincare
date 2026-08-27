@@ -3,18 +3,21 @@ package backend.preparation.application.port.in;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 import backend.preparation.domain.AppointmentReference;
 import backend.preparation.domain.OrganizationId;
 import backend.preparation.domain.PatientReference;
 
 public record CreatePreparationCaseCommand(
+        UUID requestId,
         OrganizationId organizationId,
         PatientReference patientReference,
         Optional<AppointmentReference> appointmentReference,
         Optional<Instant> scheduledAt) {
 
     public CreatePreparationCaseCommand {
+        Objects.requireNonNull(requestId, "Creation request identifier is required");
         Objects.requireNonNull(organizationId, "Organization identifier is required");
         Objects.requireNonNull(patientReference, "Patient reference is required");
         Objects.requireNonNull(appointmentReference, "Appointment reference container is required");

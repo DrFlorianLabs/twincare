@@ -105,3 +105,6 @@ until every applicable gate is closed.
 - `TC-008a` — delivered: secure patient invitation entry, free-text reason and
   server-backed resume in a minimal mobile interface; no chatbot, LLM or browser
   persistence ([PR #33](https://github.com/DrFlorianLabs/twincare-amont/pull/33)).
+- `TC-008b` — in review: idempotent manual professional creation and explicit
+  patient-link handoff, completing the provider-independent path between the
+  professional and patient interfaces.

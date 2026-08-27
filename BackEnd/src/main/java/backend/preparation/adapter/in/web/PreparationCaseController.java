@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -38,6 +39,7 @@ public class PreparationCaseController {
         CreatePreparationCaseCommand command;
         try {
             command = new CreatePreparationCaseCommand(
+                    request.requestId(),
                     new OrganizationId(organizationId),
                     new PatientReference(request.patientReference()),
                     optionalAppointmentReference(request.appointmentReference()),
@@ -47,10 +49,11 @@ public class PreparationCaseController {
         }
         CreatePreparationCaseResult result = createPreparationCase.create(command);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{caseId}")
+                .path("/{caseId}/preparation-view")
                 .buildAndExpand(result.id().value())
                 .toUri();
-        return ResponseEntity.created(location)
+        return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
+                .location(location)
                 .cacheControl(CacheControl.noStore())
                 .body(new CreatePreparationCaseResponse(
                         result.id().value(),

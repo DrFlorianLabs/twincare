@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import backend.preparation.application.port.in.CreatePreparationCaseUseCase;
@@ -26,7 +27,6 @@ import backend.preparation.application.port.out.PatientInvitationRepository;
 import backend.preparation.application.port.out.PatientReasonReader;
 import backend.preparation.application.port.out.PreparationAuditEventReader;
 import backend.preparation.application.port.out.PreparationAuditEventStore;
-import backend.preparation.application.port.out.PreparationCaseAuthorization;
 import backend.preparation.application.port.out.PreparationCaseClosureRepository;
 import backend.preparation.application.port.out.PreparationCaseIdGenerator;
 import backend.preparation.application.port.out.PreparationCaseRepository;
@@ -72,23 +72,28 @@ public class PreparationApplicationConfiguration {
 
     @Bean
     CreatePreparationCaseUseCase createPreparationCaseUseCase(
-            PreparationCaseAuthorization authorization,
+            ProfessionalPreparationAuthorization authorization,
             PreparationCaseRepository repository,
             PreparationCaseIdGenerator idGenerator,
             PreparationAuditEventStore auditEvents,
-            Clock preparationClock) {
+            Clock preparationClock,
+            PlatformTransactionManager transactionManager) {
         CreatePreparationCaseService service = new CreatePreparationCaseService(
                 authorization,
                 repository,
                 idGenerator,
                 auditEvents,
                 preparationClock);
-        return new TransactionalCreatePreparationCaseUseCase(service);
+        TransactionTemplate transactions = new TransactionTemplate(transactionManager);
+        transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        return new TransactionalCreatePreparationCaseUseCase(
+                service,
+                transactions);
     }
 
     @Bean
     TransactionalPatientInvitationUseCases patientInvitationUseCases(
-            PreparationCaseAuthorization authorization,
+            ProfessionalPreparationAuthorization authorization,
             PreparationCaseRepository preparationCases,
             PatientInvitationRepository invitations,
             PatientAccessSessionRepository accessSessions,

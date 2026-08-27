@@ -13,6 +13,89 @@ import org.junit.jupiter.api.Test;
 class FlywayBaselineSafetyTest {
 
     @Test
+    void upgradesV11WithScopedCreationIdempotencyWithoutChangingExistingCases() throws Exception {
+        String databaseName = "v11_idempotency_" + UUID.randomUUID().toString().replace("-", "");
+        String url = "jdbc:h2:mem:" + databaseName + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
+
+        Flyway.configure()
+                .dataSource(url, "sa", "")
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion(MigrationVersion.fromVersion("4"))
+                .target(MigrationVersion.fromVersion("11"))
+                .load()
+                .migrate();
+
+        try (var connection = DriverManager.getConnection(url, "sa", "");
+                var statement = connection.createStatement()) {
+            statement.execute("""
+                    INSERT INTO care_organization (id, display_name, created_at)
+                    VALUES ('idempotency-org', 'Synthetic organization', CURRENT_TIMESTAMP)
+                    """);
+            statement.execute("""
+                    INSERT INTO preparation_case (
+                        id, organization_id, patient_reference, appointment_reference,
+                        status, created_at, updated_at, version
+                    ) VALUES
+                        (UUID '10000000-0000-0000-0000-000000000091',
+                         'idempotency-org', 'synthetic-patient-1', 'synthetic-appointment-1',
+                         'CREATED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+                        (UUID '10000000-0000-0000-0000-000000000092',
+                         'idempotency-org', 'synthetic-patient-2', 'synthetic-appointment-2',
+                         'CREATED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                    """);
+        }
+
+        Flyway.configure()
+                .dataSource(url, "sa", "")
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion(MigrationVersion.fromVersion("4"))
+                .load()
+                .migrate();
+
+        try (var connection = DriverManager.getConnection(url, "sa", "");
+                var statement = connection.createStatement()) {
+            try (var result = statement.executeQuery("""
+                    SELECT COUNT(*)
+                    FROM preparation_case
+                    WHERE creation_request_id IS NULL
+                      AND creation_request_fingerprint IS NULL
+                    """)) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getInt(1)).isEqualTo(2);
+            }
+
+            statement.execute("""
+                    UPDATE preparation_case
+                    SET creation_request_id = UUID '20000000-0000-0000-0000-000000000091',
+                        creation_request_fingerprint = REPEAT('a', 64)
+                    WHERE id = UUID '10000000-0000-0000-0000-000000000091'
+                    """);
+            assertThatThrownBy(() -> statement.execute("""
+                    UPDATE preparation_case
+                    SET creation_request_id = UUID '20000000-0000-0000-0000-000000000091',
+                        creation_request_fingerprint = REPEAT('b', 64)
+                    WHERE id = UUID '10000000-0000-0000-0000-000000000092'
+                    """))
+                    .hasMessageContaining("UQ_PREPARATION_CASE_CREATION_REQUEST");
+            assertThatThrownBy(() -> statement.execute("""
+                    UPDATE preparation_case
+                    SET creation_request_id = UUID '20000000-0000-0000-0000-000000000092'
+                    WHERE id = UUID '10000000-0000-0000-0000-000000000092'
+                    """))
+                    .hasMessageContaining("CK_PREPARATION_CASE_CREATION_REQUEST_CONSISTENCY");
+            assertThatThrownBy(() -> statement.execute("""
+                    UPDATE preparation_case
+                    SET creation_request_id = UUID '20000000-0000-0000-0000-000000000092',
+                        creation_request_fingerprint = REPEAT('Z', 64)
+                    WHERE id = UUID '10000000-0000-0000-0000-000000000092'
+                    """))
+                    .hasMessageContaining("CK_PREPARATION_CASE_CREATION_REQUEST_FINGERPRINT");
+        }
+    }
+
+    @Test
     void upgradesAnExistingV6ReasonWithoutLosingClinicalData() throws Exception {
         String databaseName = "v6_" + UUID.randomUUID().toString().replace("-", "");
         String url = "jdbc:h2:mem:" + databaseName + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1";

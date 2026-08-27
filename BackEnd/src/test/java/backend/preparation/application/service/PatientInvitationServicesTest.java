@@ -22,8 +22,11 @@ import backend.preparation.application.port.in.RevokePatientInvitationCommand;
 import backend.preparation.application.port.out.PatientAccessSessionRepository;
 import backend.preparation.application.port.out.PatientInvitationRepository;
 import backend.preparation.application.port.out.PatientInvitationScope;
-import backend.preparation.application.port.out.PreparationCaseAuthorization;
+import backend.preparation.application.port.out.PreparationCaseCapability;
 import backend.preparation.application.port.out.PreparationCaseRepository;
+import backend.preparation.application.port.out.PreparationCaseCreationFingerprint;
+import backend.preparation.application.port.out.ProfessionalPreparationAuthorization;
+import backend.preparation.application.port.out.StoredPreparationCaseCreation;
 import backend.preparation.application.port.out.SecureTokenDigester;
 import backend.preparation.domain.AppointmentReference;
 import backend.preparation.domain.OrganizationId;
@@ -67,7 +70,7 @@ class PatientInvitationServicesTest {
         invitations.current = previous;
         RecordingAccessSessionRepository sessions = new RecordingAccessSessionRepository();
         IssuePatientInvitationService service = new IssuePatientInvitationService(
-                organizationId -> 42L,
+                authorization(42L),
                 cases,
                 invitations,
                 sessions,
@@ -92,8 +95,16 @@ class PatientInvitationServicesTest {
     void authorizationFailureStopsBeforeCaseLookupOrSecretGeneration() {
         RecordingPreparationCaseRepository cases = new RecordingPreparationCaseRepository(newCase());
         boolean[] generated = { false };
-        PreparationCaseAuthorization denied = organizationId -> {
-            throw new UnauthorizedActionException("forbidden");
+        ProfessionalPreparationAuthorization denied = new ProfessionalPreparationAuthorization() {
+            @Override
+            public long requireAccess(OrganizationId organizationId, PreparationCaseCapability capability) {
+                throw new UnauthorizedActionException("forbidden");
+            }
+
+            @Override
+            public void requireAssignableStaff(OrganizationId organizationId, long userId) {
+                throw new UnsupportedOperationException();
+            }
         };
         IssuePatientInvitationService service = new IssuePatientInvitationService(
                 denied,
@@ -201,7 +212,7 @@ class PatientInvitationServicesTest {
         RecordingAccessSessionRepository sessions = new RecordingAccessSessionRepository();
         List<PreparationAuditEvent> auditEvents = new ArrayList<>();
         RevokePatientInvitationService service = new RevokePatientInvitationService(
-                organizationId -> 42L,
+                authorization(42L),
                 new RecordingPreparationCaseRepository(newCase()),
                 invitations,
                 sessions,
@@ -247,6 +258,22 @@ class PatientInvitationServicesTest {
         return Clock.fixed(NOW, ZoneOffset.UTC);
     }
 
+    private ProfessionalPreparationAuthorization authorization(long actorUserId) {
+        return new ProfessionalPreparationAuthorization() {
+            @Override
+            public long requireAccess(OrganizationId organizationId, PreparationCaseCapability capability) {
+                assertThat(organizationId).isEqualTo(ORGANIZATION_ID);
+                assertThat(capability).isEqualTo(PreparationCaseCapability.ISSUE_PATIENT_INVITATION);
+                return actorUserId;
+            }
+
+            @Override
+            public void requireAssignableStaff(OrganizationId organizationId, long userId) {
+                throw new UnsupportedOperationException();
+            }
+        };
+    }
+
     private static final class TestDigester implements SecureTokenDigester {
         @Override
         public TokenDigest digestInvitation(SecureToken token) {
@@ -273,6 +300,14 @@ class PatientInvitationServicesTest {
         }
 
         @Override
+        public void add(
+                PreparationCase preparationCase,
+                UUID requestId,
+                PreparationCaseCreationFingerprint fingerprint) {
+            current = preparationCase;
+        }
+
+        @Override
         public long update(PreparationCase preparationCase) {
             current = preparationCase;
             return preparationCase.revision() + 1;
@@ -287,6 +322,13 @@ class PatientInvitationServicesTest {
         public Optional<PreparationCase> findByIdForUpdate(PreparationCaseId id, OrganizationId organizationId) {
             lockedLookups++;
             return matches(id, organizationId);
+        }
+
+        @Override
+        public Optional<StoredPreparationCaseCreation> findByCreationRequestId(
+                OrganizationId organizationId,
+                UUID requestId) {
+            return Optional.empty();
         }
 
         private Optional<PreparationCase> matches(PreparationCaseId id, OrganizationId organizationId) {

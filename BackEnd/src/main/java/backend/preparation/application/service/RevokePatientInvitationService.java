@@ -10,8 +10,9 @@ import backend.preparation.application.port.in.RevokePatientInvitationCommand;
 import backend.preparation.application.port.in.RevokePatientInvitationUseCase;
 import backend.preparation.application.port.out.PatientAccessSessionRepository;
 import backend.preparation.application.port.out.PatientInvitationRepository;
-import backend.preparation.application.port.out.PreparationCaseAuthorization;
+import backend.preparation.application.port.out.PreparationCaseCapability;
 import backend.preparation.application.port.out.PreparationCaseRepository;
+import backend.preparation.application.port.out.ProfessionalPreparationAuthorization;
 import backend.preparation.application.port.out.PreparationAuditEventStore;
 import backend.preparation.domain.PatientInvitationStatus;
 import backend.preparation.domain.PreparationAuditEvent;
@@ -22,7 +23,7 @@ import backend.preparation.domain.PreparationCase;
 
 public final class RevokePatientInvitationService implements RevokePatientInvitationUseCase {
 
-    private final PreparationCaseAuthorization authorization;
+    private final ProfessionalPreparationAuthorization authorization;
     private final PreparationCaseRepository preparationCases;
     private final PatientInvitationRepository invitations;
     private final PatientAccessSessionRepository accessSessions;
@@ -30,7 +31,7 @@ public final class RevokePatientInvitationService implements RevokePatientInvita
     private final Clock clock;
 
     public RevokePatientInvitationService(
-            PreparationCaseAuthorization authorization,
+            ProfessionalPreparationAuthorization authorization,
             PreparationCaseRepository preparationCases,
             PatientInvitationRepository invitations,
             PatientAccessSessionRepository accessSessions,
@@ -47,7 +48,8 @@ public final class RevokePatientInvitationService implements RevokePatientInvita
     @Override
     public void revoke(RevokePatientInvitationCommand command) {
         Objects.requireNonNull(command, "Patient invitation revocation command is required");
-        long actorUserId = authorization.requireStaffAccess(command.organizationId());
+        long actorUserId = authorization.requireAccess(
+                command.organizationId(), PreparationCaseCapability.ISSUE_PATIENT_INVITATION);
         var preparationCase = preparationCases.findByIdForUpdate(
                         command.preparationCaseId(), command.organizationId())
                 .orElseThrow(PreparationCaseNotFoundException::new);

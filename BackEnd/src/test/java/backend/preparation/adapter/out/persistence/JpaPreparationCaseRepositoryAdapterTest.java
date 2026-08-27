@@ -7,11 +7,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.test.context.transaction.TestTransaction;
 
 import backend.preparation.domain.AppointmentReference;
+import backend.preparation.application.port.out.PreparationCaseCreationFingerprint;
 import backend.preparation.domain.OrganizationId;
 import backend.preparation.domain.PatientReference;
 import backend.preparation.domain.PreparationCase;
@@ -30,6 +32,14 @@ class JpaPreparationCaseRepositoryAdapterTest {
 
     @Autowired
     private EntityManager entityManager;
+
+    @BeforeEach
+    void addOrganization() {
+        entityManager.createNativeQuery("""
+                INSERT INTO care_organization (id, display_name)
+                VALUES ('cabinet-a', 'Synthetic organization')
+                """).executeUpdate();
+    }
 
     @Test
     void persistsAndRestoresTheAggregateWithoutNewEvents() {
@@ -70,6 +80,27 @@ class JpaPreparationCaseRepositoryAdapterTest {
 
         assertThat(adapter.findById(original.id(), new OrganizationId("cabinet-b"))).isEmpty();
         assertThat(adapter.findById(original.id(), ORGANIZATION_ID)).isPresent();
+    }
+
+    @Test
+    void persistsAndScopesTheCreationRequestFingerprint() {
+        JpaPreparationCaseRepositoryAdapter adapter = new JpaPreparationCaseRepositoryAdapter(springDataRepository);
+        UUID requestId = UUID.fromString("adf8f2d0-a6cb-4386-afc2-271fa0a04523");
+        PreparationCase original = PreparationCase.create(
+                new PreparationCaseId(UUID.fromString("f2ddf130-b3d9-442f-994e-126bd7262f4e")),
+                ORGANIZATION_ID,
+                new PatientReference("patient-idempotency"),
+                Optional.of(new AppointmentReference("appointment-idempotency")),
+                Optional.empty(),
+                CREATED_AT);
+
+        adapter.add(original, requestId, new PreparationCaseCreationFingerprint("a".repeat(64)));
+        entityManager.clear();
+
+        var stored = adapter.findByCreationRequestId(ORGANIZATION_ID, requestId).orElseThrow();
+        assertThat(stored.preparationCase().id()).isEqualTo(original.id());
+        assertThat(stored.payloadFingerprint().value()).isEqualTo("a".repeat(64));
+        assertThat(adapter.findByCreationRequestId(new OrganizationId("cabinet-b"), requestId)).isEmpty();
     }
 
     @Test

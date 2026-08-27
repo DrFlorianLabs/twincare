@@ -105,7 +105,11 @@ class PreparationAuditRollbackIntegrationTest {
                         .header("Authorization", bearerToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"patientReference":"synthetic-rollback","appointmentReference":"rollback-appointment"}
+                                {
+                                  "requestId":"234c7cb0-d200-4c03-92fe-a99817676ec8",
+                                  "patientReference":"synthetic-rollback",
+                                  "appointmentReference":"rollback-appointment"
+                                }
                                 """))
                 .andExpect(status().isInternalServerError())
                 .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
