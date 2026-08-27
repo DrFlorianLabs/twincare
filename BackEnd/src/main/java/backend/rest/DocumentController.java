@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -24,6 +25,7 @@ import backend.entity.Document;
 import backend.entity.TypeDocument;
 import backend.service.DocumentService;
 
+@Profile("legacy-prototype")
 @RestController
 @RequestMapping("/api/documents")
 public class DocumentController {

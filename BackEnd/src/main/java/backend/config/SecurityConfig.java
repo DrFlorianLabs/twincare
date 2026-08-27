@@ -147,43 +147,18 @@ public class SecurityConfig {
                                 response.sendError(HttpStatus.FORBIDDEN.value())))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
-                        .hasAuthority("ADMIN")
+                        .denyAll()
 
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/auth/register")
-                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/auth/reset-password")
-                        .hasAuthority("ADMIN")
-
-                        .requestMatchers(HttpMethod.DELETE, "/api/users/**")
-                        .hasAuthority("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/users", "/api/users/**")
-                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
-                        .requestMatchers("/api/users/**")
-                        .hasAuthority("ADMIN")
-
-                        .requestMatchers(HttpMethod.GET, "/api/dossiers")
-                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
-                        .requestMatchers("/api/dossiers/**")
-                        .hasAnyAuthority("PATIENT", "ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
-
-                        .requestMatchers("/api/documents/**")
-                        .hasAnyAuthority("PATIENT", "ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
-
-                        .requestMatchers("/api/validations/**")
-                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
-                        .requestMatchers("/api/interactions/**")
-                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
-
-                        .requestMatchers("/api/chatbot/**")
-                        .hasAuthority("PATIENT")
+                        .requestMatchers("/api/auth/**")
+                        .denyAll()
 
                         .requestMatchers(HttpMethod.GET, "/api/v1/professional-context")
                         .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
                         .requestMatchers("/api/v1/professional-context")
                         .denyAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/organizations/*/preparation-cases")
-                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/organizations/*/preparation-cases")
                         .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
                         .requestMatchers(HttpMethod.GET,
@@ -191,10 +166,10 @@ public class SecurityConfig {
                         .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/organizations/*/preparation-cases/*/invitations")
-                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
                         .requestMatchers(HttpMethod.DELETE,
                                 "/api/v1/organizations/*/preparation-cases/*/invitations/*")
-                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN", "ADMIN")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/organizations/*/preparation-cases/*/tasks")
                         .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
@@ -215,15 +190,9 @@ public class SecurityConfig {
                         .hasAuthority("MEDECIN")
                         .requestMatchers("/api/v1/organizations/**")
                         .denyAll()
-
-                        // Historical prototype APIs are intentionally dormant in V0.1.
-                        .requestMatchers("/api/parcours/**", "/api/environnement/**")
+                        .requestMatchers("/api/v1/**", "/api/**")
                         .denyAll()
-
-                        .requestMatchers("/api/admin/**")
-                        .hasAuthority("ADMIN")
-
-                        .anyRequest().authenticated())
+                        .anyRequest().denyAll())
                 .userDetailsService(userService);
 
         http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
