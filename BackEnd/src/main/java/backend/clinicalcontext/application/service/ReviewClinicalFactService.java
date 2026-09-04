@@ -2,6 +2,7 @@ package backend.clinicalcontext.application.service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
 import backend.clinicalcontext.application.ClinicalContextNotFoundException;
@@ -53,7 +54,9 @@ public final class ReviewClinicalFactService implements ReviewClinicalFactUseCas
                         new ClinicalContextId(command.preparationCaseId().value()),
                         owner)
                 .orElseThrow(ClinicalFactNotFoundException::new);
-        Instant now = clock.instant();
+        // Match TIMESTAMP(6) so the initial response and a persisted retry agree,
+        // including on platforms whose system clock exposes nanoseconds.
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         try {
             if (fact.review(command.decision(), reviewer, now)) {
                 facts.update(fact);
