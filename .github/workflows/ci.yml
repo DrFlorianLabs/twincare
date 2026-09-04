@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     name: Backend tests
@@ -55,10 +59,10 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: ${{ matrix.lockfile }}
+      - name: Use the locally verified npm release
+        run: npm install --global npm@10.9.9 --no-audit --no-fund --fetch-timeout=30000 --fetch-retries=1
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund --fetch-timeout=30000 --fetch-retries=1
-      - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high --fetch-timeout=30000 --fetch-retries=1
       - name: Unit tests
         if: matrix.app == 'back-office'
         run: npm run test:unit
@@ -73,3 +77,5 @@ jobs:
         run: node --check ../../BackEnd/src/main/resources/static/demo/app.js
       - name: Build
         run: npm run build
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high --fetch-timeout=30000 --fetch-retries=1

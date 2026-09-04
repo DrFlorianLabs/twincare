@@ -48,6 +48,8 @@ de données sont remplacés par des adaptateurs locaux actifs sous le profil
 
 ## Développement
 
+Interfaces : Node 22 (`.nvmrc`) et npm 10.9.9, comme dans la CI.
+
 Backend :
 
 ```sh
