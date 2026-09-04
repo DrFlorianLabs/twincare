@@ -5,6 +5,7 @@
 BackEnd/uploads/
 **/uploads/
 BackEnd/runtime/
+**/.twincare-demo/
 **/preparation-attachments/
 **/preparation-attachment-storage/
 **/private-multipart/
@@ -21,7 +22,9 @@ BackEnd/runtime/
 **/.DS_Store
 desktop.ini
 **/desktop.ini
+*.code-workspace
 
 # Build outputs
 **/target/
 **/dist/
+*.tsbuildinfo

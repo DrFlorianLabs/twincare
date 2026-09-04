@@ -4,12 +4,22 @@ import router from './router'
 
 import 'vuetify/styles'
 import { createVuetify } from 'vuetify'
-import * as components from 'vuetify/components'
+import {
+  VAlert, VApp, VAppBar, VAppBarTitle, VBtn, VCard, VCardActions, VCardText,
+  VCardTitle, VChip, VCol, VContainer, VDialog, VForm, VIcon, VList, VListItem,
+  VListItemSubtitle, VListItemTitle, VMain, VPagination, VRow, VSelect,
+  VSkeletonLoader, VSpacer, VTextField
+} from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import '@mdi/font/css/materialdesignicons.css'
 
 const vuetify = createVuetify({
-  components,
+  components: {
+    VAlert, VApp, VAppBar, VAppBarTitle, VBtn, VCard, VCardActions, VCardText,
+    VCardTitle, VChip, VCol, VContainer, VDialog, VForm, VIcon, VList, VListItem,
+    VListItemSubtitle, VListItemTitle, VMain, VPagination, VRow, VSelect,
+    VSkeletonLoader, VSpacer, VTextField
+  },
   directives,
   theme: {
     defaultTheme: 'twincare',

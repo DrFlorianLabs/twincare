@@ -5,13 +5,17 @@ import backend.dto.ChatbotSessionResponse;
 import backend.entity.InteractionChatbot;
 import backend.service.ChatbotSessionService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 import org.springframework.context.annotation.Profile;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @Profile("legacy-prototype")
 @RestController
 @RequestMapping("/api/chatbot")
+@Validated
 public class ChatbotController {
 
     private final ChatbotSessionService chatbotSessionService;
@@ -23,11 +27,7 @@ public class ChatbotController {
     
     @GetMapping("/session/patient/{patientId}")
     public ChatbotSessionResponse demarrerSession(@PathVariable Long patientId,
-                                                  @RequestParam(defaultValue = "2") int limit) {
-        // Sécurité backend : on ne dépasse pas 5 questions
-        if (limit > 5) {
-            limit = 5;
-        }
+                                                  @RequestParam(defaultValue = "2") @Min(1) @Max(5) int limit) {
         return chatbotSessionService.demarrerSession(patientId, limit);
     }
 

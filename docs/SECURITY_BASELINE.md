@@ -1,272 +1,178 @@
-# TwinCare — Security Baseline
+# Socle de sécurité et de confidentialité
 
-Status: **mandatory before real health-data pilot**
+Statut : règles normatives pour tout environnement TwinCare.
 
-This document defines minimum engineering controls. It is not a legal certification and does not replace a formal security/risk/compliance assessment.
+## Principes non négociables
 
-## 1. Data minimisation
+- Ne jamais committer de donnée de santé réelle, export patient, document
+  clinique, secret, fichier `.env` ou donnée d'exécution.
+- Ne jamais journaliser le contenu saisi, l'identité d'un patient, un nom de
+  fichier clinique, un jeton, une charge d'export ou l'identité d'un relecteur.
+- Minimiser la collecte et conserver provenance, temporalité, certitude et
+  validation de toute information cliniquement pertinente.
+- Authentifier puis autoriser chaque objet sensible à la frontière du cas
+  d'usage. UUID, clé de stockage et donnée fournie par le navigateur ne sont pas
+  des preuves d'accès.
+- Échouer fermé pour toute règle, portée, état, type de contenu ou transition
+  inconnus.
+- Considérer toute sortie d'IA comme une entrée non fiable ; elle ne peut ni
+  valider un fait, ni confirmer un cas, ni produire seule un effet clinique.
 
-Collect only information useful to preparation of the intended consultation or an explicitly configured pathway.
+## Secrets et configuration
 
-Do not collect information merely because it may become useful later.
+Les secrets JWT, mots de passe initiaux, peppers d'invitation/session et accès à
+la base sont obligatoires hors démonstration. Les fichiers d'exemple ne
+contiennent que des marqueurs non fonctionnels. Les valeurs viennent du
+gestionnaire de secrets de l'environnement, sont renouvelables et ne sont jamais
+affichées par l'application ou les scripts.
 
-## 2. Source control
+Le profil `demo` génère des secrets éphémères, écoute uniquement sur
+`127.0.0.1` et n'accepte que sa base H2 dédiée. Cette vérification s'exécute avant
+l'initialisation de la datasource et de Flyway, puis à chaque action destructive
+du scénario. Le profil n'est pas déployable et son répertoire `.twincare-demo/`
+est ignoré.
 
-Never commit:
+## Identité, tenant et capacités
 
-- patient documents;
-- exports of medical records;
-- screenshots containing identifiable health data;
-- database dumps containing personal/health data;
-- secrets, tokens or production credentials;
-- application logs containing patient content.
+Les routes professionnelles exigent un JWT valide. L'organisation active, le
+rôle et les capacités cliniques sont dérivés des appartenances serveur. Toute
+opération sensible réautorise l'appartenance et l'objet dans le cas d'usage ; une
+sélection de tenant côté client n'a aucune autorité.
 
-Runtime upload directories and local data directories must be ignored by Git.
+L'administration du tenant n'accorde pas d'accès clinique. Les médecins et
+assistants actifs disposent uniquement des capacités explicites nécessaires.
+Confirmation de préparation, audit et clôture restent réservés au médecin.
+Acteurs et personnes affectées sont résolus dans l'organisation ; une identité
+fournie par le client est ignorée ou rejetée.
 
-If a committed file may contain real health data, treat removal from the current branch as insufficient: assess whether Git history and remote copies must be purged.
+La chaîne Spring Security normale repose sur une liste positive méthode + chemin
+et se termine par `denyAll`. Les contrôleurs historiques de comptes, utilisateurs,
+dossiers, documents, validation et chatbot sont derrière le profil inactif
+`legacy-prototype`. La documentation interactive et les routes inconnues restent
+fermées pour tous les rôles, y compris administrateur.
 
-## 3. Authentication
+## Invitation et session patient
 
-- No default JWT secret.
-- Startup must fail when the required secret is absent or cryptographically inadequate.
-- Login is the only anonymous authentication endpoint in the current prototype baseline.
-- Patient/staff account provisioning is an explicit privileged operation.
-- Password recovery must not permit unauthenticated reset based only on knowledge of an email address.
-- Access tokens are never logged.
+Une invitation est aléatoire, à usage unique, limitée dans le temps et bornée à
+un cas. Son secret n'est conservé que sous forme de condensat HMAC avec séparation
+de domaine. L'échange verrouille le cas et l'invitation, consomme le justificatif
+et émet atomiquement une session courte.
 
-## 4. Authorization
+La session patient utilise un cookie `HttpOnly`, `SameSite` et `Secure` sous
+HTTPS. Elle possède une chaîne d'authentification dédiée sans JWT. Le serveur
+déduit organisation, cas et portée ; chaque écriture reprend les verrous et
+revérifie session, invitation, expiration et état du cas. Les mutations exigent
+un jeton CSRF lié à la session.
 
-Authorization must be checked at both route and service/domain boundaries for sensitive operations.
+Le lien d'invitation est remis au navigateur dans un fragment d'URL, jamais dans
+la requête serveur initiale. Il reste volatil, n'est ni journalisé ni persistant
+et n'est copié que par action explicite. Le frontend ne rejoue pas automatiquement
+une création ou une émission dont le résultat est ambigu.
 
-For a patient:
+La reprise du motif patient renvoie uniquement la valeur exacte utile au
+formulaire. Elle est `no-store`, ne crée pas d'audit de lecture et ne persiste pas
+le texte dans le stockage du navigateur.
 
-- access is limited to that patient's own preparation/dossier context and documents.
+## Données cliniques et concurrence
 
-For staff:
+Le navigateur ne fournit ni provenance, ni certitude, ni acteur. Ces valeurs
+sont imposées par le cas d'usage. Les faits atomiques conservent les corrections :
+un nouveau fait devient courant et l'ancien est marqué remplacé. Les contraintes
+de persistance interdisent deux valeurs courantes concurrentes du même type.
 
-- access must be limited by role and, before real deployment, by organisation/tenant membership.
-- clinical access is a separate capability from tenant administration;
-- clinicians and active medical assistants may view preparation data;
-- organisation administrators have no clinical view by default;
-- attachment download, task management and readiness confirmation require
-  dedicated capabilities, with readiness confirmation reserved for clinicians.
-- task assignees and actors must be resolved against active clinical membership
-  in the same organisation; client-supplied actor identities are ignored.
-- ready confirmation must bind to the case revision actually reviewed and fail
-  on any intervening reason, task or attachment change.
-- ready evidence must be revalidated on every read, and multi-query clinical
-  views must use one consistent database snapshot.
-- professional preparation responses, including errors, must be `no-store`.
-- professional organization and capability discovery is derived exclusively
-  from the authenticated server identity and active memberships; client-side
-  context remains advisory and never replaces use-case authorization.
-- preparation audit access requires a dedicated clinician-only capability;
-  assistants and administrative roles receive no audit access by default.
-- explicit preparation closure requires a dedicated clinician-only capability,
-  the exact ready-case revision and consistent readiness evidence;
-- closure revokes every remaining invitation and patient session in the same
-  transaction and stores only minimized immutable closure metadata.
-- professional case creation and invitation issuance require distinct
-  server-derived capabilities for an active clinician or medical assistant;
-  the client never supplies the actor, role or organization membership.
-- case creation is idempotent within one organization through a required UUID
-  request identifier and a server-persisted canonical payload fingerprint;
-  exact replay creates neither a second case nor a second audit event, while a
-  different payload fails closed.
-- the default runtime uses an explicit method-and-path allowlist and ends in
-  `denyAll`; no authenticated fallback can expose a newly mapped route.
-- prototype account administration, user, dossier, document, validation and
-  chatbot controllers are absent from the active Spring context behind an
-  inactive legacy profile. Representative routes are denied for every role,
-  including administrator, and interactive API documentation is disabled.
-- the legacy storage-recovery listener is absent from the active context and
-  cannot scan historical storage during default startup.
+L'enregistrement du motif, sa représentation atomique et l'événement d'audit
+partagent une transaction. Les rejeux identiques sont sans effet. Une erreur de
+persistance ou d'audit annule toute la mutation.
 
-An object identifier, storage filename or UUID is **not** an authorization mechanism.
+La préparation professionnelle est calculée par une politique déterministe et
+versionnée. La confirmation médicale porte sur la révision exacte relue. Les
+lectures revérifient la preuve ; toute modification ultérieure l'invalide. Les
+vues composées utilisent un instantané cohérent afin de ne jamais combiner des
+révisions différentes.
 
-## 5. Documents
+La clôture exige un médecin, la révision attendue et la preuve de préparation
+exacte. Elle verrouille cas, invitations et sessions dans un ordre stable,
+révoque les accès patient et enregistre la clôture immuable dans une seule
+transaction.
 
-- No public `/files/{filename}` access.
-- Retrieve content through an authenticated document endpoint.
-- Verify ownership/role before resolving bytes from storage.
-- Validate allowed content type and file signature, not only filename extension.
-- Generate an opaque storage key server-side.
-- Preserve the original filename only as display metadata after sanitisation.
-- Block path traversal and symlink escape.
-- Delete stored bytes when document metadata is deleted, with a recoverable cleanup strategy as persistence evolves.
-- Keep metadata and bytes consistent across transaction failure: quarantine
-  deletions until database commit, restore them on rollback, remove new uploads
-  on rollback, and reconcile interrupted quarantines at startup.
-- Keep multipart parser temporary files in a dedicated private runtime
-  directory, outside Git and historical upload roots; purge abandoned regular
-  files without following symlinks.
-- Fail application startup when attachment metadata references missing bytes or
-  storage reconciliation cannot complete. A missing byte object must not block
-  deletion or replacement of its stale metadata.
-- For professional download, authorize the active organization membership
-  before resolving metadata or bytes; lock `case -> attachment`, then open the
-  final object once with symlink following disabled.
-- Verify actual size and SHA-256 on the pinned handle before committing response
-  headers. Stream that same handle only after the database transaction ends;
-  never lazily reopen a storage path after releasing the locks.
-- Force `Content-Disposition: attachment`, allowlisted `Content-Type`, exact
-  `Content-Length`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`
-  and `Pragma: no-cache`. Do not expose range, inline, ETag or public URL support
-  in V0.1.
+## Documents privés
 
-## 6. Logs
+Il n'existe aucune URL publique vers les octets. Un dépôt valide taille,
+extension, type MIME autorisé et signature binaire avant promotion. Le nom
+d'origine est nettoyé et utilisé seulement comme métadonnée d'affichage ; la clé
+opaque générée côté serveur reste interne.
 
-Application logs must not contain health data or directly identifying patient content.
+Le stockage refuse traversée de chemin et évasion par lien symbolique. Il met les
+octets en quarantaine et coordonne promotion, remplacement et suppression avec
+commit ou rollback. Au démarrage, la réconciliation purge les temporaires sûrs
+et échoue fermée si une métadonnée active référence des octets manquants ou si
+une réparation ne peut être prouvée. Les fichiers multipart temporaires résident
+dans un répertoire privé distinct.
 
-Do not log:
+Pour un téléchargement professionnel, le service :
 
-- names;
-- email addresses;
-- patient free text;
-- original document filenames;
-- document contents;
-- clinical summaries;
-- preparation task labels;
-- scores linked to patient identity;
-- JWTs or secrets.
+1. autorise l'appartenance et la capacité dans l'organisation ;
+2. verrouille le cas puis la métadonnée de pièce jointe ;
+3. ouvre une seule fois l'objet final sans suivre les liens symboliques ;
+4. vérifie la taille réelle et le SHA-256 sur ce handle ;
+5. termine la transaction puis diffuse ce même handle.
 
-Prefer event names, technical correlation IDs and aggregate timing/status metadata.
+La réponse force téléchargement, type autorisé, longueur exacte,
+`X-Content-Type-Options: nosniff`, `Cache-Control: no-store` et
+`Pragma: no-cache`. V0.1 n'expose ni aperçu public, ni range, ni ETag.
 
-Preparation audit events are stored separately from logs with a closed type,
-schema version, server-derived actor category, server timestamp, tenant/case
-scope, persisted case revision and optional technical subject identifier.
-They must never contain patient references, clinical text, task labels,
-filenames, storage keys, digests, credentials, IP addresses, User-Agent values
-or arbitrary JSON. A consequential mutation and its audit append share one
-transaction; audit failure rolls the mutation back. Idempotent retries and
-no-ops do not create duplicate evidence.
+## Audit sans PHI
 
-Audit reads are tenant-scoped, bounded, cursor-paginated and `no-store`.
-Pre-audit cases are explicitly marked as historically incomplete; no synthetic
-backfill may imply a chronology that cannot be proven. There is no audit
-deletion endpoint until retention, deletion, backup, restore and legal-hold
-rules have been formally approved.
+La chronologie métier append-only est distincte des logs applicatifs. Son schéma
+fermé autorise seulement : type d'événement, version, instant serveur, catégorie
+d'acteur, organisation/cas, révision persistée et éventuel identifiant technique
+de sujet.
 
-Closure evidence has no update or deletion endpoint. It contains only technical
-tenant/case scope, server-derived clinician identity, server time and the
-ready/closed revision chain. A failed closure audit append rolls back the case
-transition and every credential revocation.
+Elle exclut référence patient, texte clinique, libellé de tâche, nom ou clé de
+fichier, empreinte de document, secret, adresse IP, User-Agent et JSON libre. Une
+mutation conséquente et son append partagent la transaction. Rejeu idempotent et
+no-op ne dupliquent pas la preuve.
 
-## 7. AI / model boundary
+La lecture est réservée au médecin, limitée, paginée par curseur et `no-store`.
+Les cas antérieurs au mécanisme signalent un historique incomplet ; aucun
+backfill ne fabrique une chronologie. Il n'existe pas d'API de suppression avant
+validation formelle des règles de rétention, sauvegarde, restauration,
+effacement et gel légal.
 
-- Raw health data is not sent to an external model implicitly.
-- External model use, if introduced, requires an explicit deployment/configuration choice and appropriate compliance analysis.
-- A local/no-op implementation must exist for every AI port needed by core workflows.
-- Model output is untrusted input: validate structure, provenance and allowed values.
-- Models cannot directly perform irreversible or consequential domain transitions.
+Les logs opérationnels peuvent contenir un code d'événement, un résultat, une
+durée et un identifiant de corrélation opaque. Ils excluent corps de requête,
+raison de consultation, document, export, token, email, nom et identifiant lié à
+une personne.
 
-## 8. External integrations
+## Navigateur et réponses
 
-No vendor API is a single point of failure for TwinCare core.
+Toutes les réponses de préparation, y compris les erreurs, sont privées et
+`no-store`. CORS utilise une liste explicite. Les écrans ne persistent ni JWT ni
+contenu clinique au-delà du strict nécessaire : le JWT professionnel reste dans
+`sessionStorage`, le contexte clinique en mémoire et les URL objet sont révoquées.
+Les requêtes périmées sont annulées ou ignorées pour éviter qu'une réponse lente
+remplace le tenant ou le cas courant.
 
-Adapters must implement stable internal interfaces. Credentials live in environment/secret management, never source code. Failure of an integration must degrade to a safe local/manual workflow when possible.
+La démonstration applique une CSP same-origin, ne charge aucun script, police,
+mesure d'audience ou service distant et porte un avertissement visible « données
+fictives uniquement ».
 
-## 9. Multi-tenancy
+## Limites avant données réelles
 
-The active preparation endpoints scope membership and case queries by
-organisation. The historical prototype does not yet establish this boundary
-consistently, so complete tenant isolation remains a **release blocker before
-multi-structure commercial deployment**.
+La démo n'est pas homologuée pour des données réelles : sa base H2 et ses exports
+ne sont pas chiffrés par l'application. Un usage réel exige notamment TLS,
+chiffrement des volumes et sauvegardes, gestion des clés, exploitation de
+l'identité et validation des procédures de rétention/restauration. Ces exigences
+ne sont pas satisfaites par la seule écoute sur l'interface locale.
 
-Future access checks must include at minimum:
+## Vérifications avant livraison
 
-`authenticated actor -> organisation membership -> role -> patient/preparation relationship -> requested operation`
-
-## 10. Security testing gates
-
-Before a real-health-data pilot, automated tests must cover at minimum:
-
-- anonymous document access rejected;
-- patient A cannot access patient B dossier/document;
-- patient cannot enumerate all dossiers/users;
-- privileged endpoints reject patient role;
-- file traversal attempts rejected;
-- unsupported/mismatched file signatures rejected;
-- missing/weak JWT secret prevents startup;
-- unknown clinical trigger fails closed;
-- logs do not include known test PHI markers in critical flows.
-- audit access rejects assistants, administrators, inactive memberships and
-  cross-organization case identifiers;
-- a failed audit append rolls back the corresponding business mutation;
-- audit pagination is bounded and legacy cases disclose incomplete coverage.
-
-## 11. Deployment
-
-Production-like use requires an environment appropriate for French health data, with encryption, backups, recovery procedures, secrets management, monitoring, audit controls and the applicable hosting/compliance requirements assessed explicitly.
-
-The current repository must not imply that a generic demo deployment is sufficient for real health data.
-
-Interactive API documentation is disabled by default. If it is explicitly
-enabled for a controlled environment, the HTTP security boundary restricts it
-to authenticated administrators.
-
-Before connecting an existing database, inspect its `flyway_schema_history` and
-schema state. Prototype migration V3 is destructive and must never be replayed
-over a populated legacy schema. Existing schemas without Flyway history must be
-baselined at version 4 only after their structure and backups have been verified.
-Startup also fails closed if a schema-history version older than V3 coexists
-with legacy application tables; that state requires an explicit, backed-up
-migration decision rather than an automatic destructive replay.
-
-## 12. Professional browser client
-
-The current legacy JWT login cannot yet issue an `HttpOnly` professional
-session cookie. The V0.1 professional client therefore keeps the JWT in
-`sessionStorage`, never `localStorage`, and removes historical prototype keys
-on login/logout. This limits persistence but does not remove the impact of an
-XSS; strict content-security policy and a server-managed cookie session remain
-deployment work before real patient use.
-
-Clinical API responses are rendered only through Vue text interpolation. The
-client contains no `v-html`, analytics, service worker or clinical-data cache.
-Patient reason, task labels, attachment names and read models stay in memory
-only and are discarded on logout, authorization loss or page close. Unknown
-readiness/blocker values fail closed and never enable a command.
-
-The manual creation client generates an unpredictable UUID and captures the
-exact normalized payload for one unchanged draft. It retains both only in memory
-for an explicit retry after an ambiguous failure. It never retries creation or
-invitation automatically. An ambiguous
-creation cannot be silently closed and restarted with a new request identifier;
-the user must retry the unchanged request or explicitly abandon it after
-successfully refreshing the list. A failed or stale refresh preserves the
-request identifier. The configured patient-application URL must be absolute
-HTTPS without credentials, query or fragment; HTTP is restricted to exact
-local loopback development hosts. The invitation secret is added only as an
-exact URL fragment, remains in volatile memory, is copied only on explicit
-action and is cleared when its dialog, case, organization or professional
-session is invalidated. It must not enter the professional route, browser
-storage, logs, analytics or an automatic notification request. TwinCare cannot
-erase a user-requested operating-system clipboard copy and labels the copied
-link as confidential.
-
-## 13. Patient browser client
-
-The V0.1 patient entry point accepts invitation credentials only from the URL
-fragment. It removes every fragment before the first API request and rejects a
-credential supplied in the query string, an ambiguous fragment or an invalid
-base64url shape. The patient page sets a `no-referrer` policy and contains no
-analytics, pixels, third-party scripts or service worker.
-
-The one-time invitation secret, session CSRF value and patient wording remain
-only in volatile JavaScript memory. They must never be written to
-`localStorage`, `sessionStorage`, browser caches, URLs or logs. Continuing access
-uses the server-issued `HttpOnly`, `Secure`, `SameSite=Strict` cookie scoped to
-the patient namespace. CSRF is refreshed from the authenticated session read
-after reload and sent only on explicit unsafe requests.
-
-The active patient application calls only `/api/v1/patient-access/**`; it does
-not use the historical account, chatbot or dossier endpoints. Patient reason
-resume revalidates the server-owned organization/case/session/invitation scope
-inside the application and persistence boundaries and returns no technical
-identifier. Every patient response and generic failure is `no-store`,
-`no-referrer` and `nosniff`.
-
-This browser hardening does not authorize real patient data. A strict deployed
-content-security policy, end-to-end deployment review and all remaining pilot
-gates still apply.
+1. Exécuter tests, migrations, builds, lint et contrôles de types disponibles.
+2. Inspecter le diff et l'inventaire des fichiers suivis et non suivis.
+3. Rechercher secrets, `.env`, uploads, documents et traces de données
+   identifiantes ; examiner chaque correspondance.
+4. Vérifier isolation inter-organisations, capacités, transitions invalides,
+   idempotence, absence de cache et fermeture des routes non autorisées.
+5. Vérifier les permissions et chemins de stockage, ainsi que l'inaccessibilité
+   de `/demo/**` hors profil `demo`.
+6. N'utiliser que des fixtures explicitement synthétiques.

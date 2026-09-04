@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>TwinCare — Démonstration locale</title>
+    <link rel="stylesheet" href="styles.css">
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <div class="demo-banner" role="alert">
+      <strong>Données fictives uniquement</strong>
+      <span>N’utilisez aucun nom, symptôme ou document réel dans cette démonstration.</span>
+    </div>
+
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="TwinCare, accueil de la démonstration">
+        <span class="brand-mark" aria-hidden="true">TC</span>
+        <span><strong>TwinCare</strong><small>Préparer avant de consulter</small></span>
+      </a>
+      <span class="local-pill">Mode local sécurisé</span>
+    </header>
+
+    <main>
+      <section class="intro" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">Parcours guidé · moins de 10 minutes</p>
+          <h1 id="page-title">Voyez la consultation se préparer en temps réel.</h1>
+          <p class="intro-copy">Transmettez puis corrigez un motif fictif côté patient. Passez ensuite côté équipe médicale pour vérifier l’historique, les éléments manquants et valider l’information.</p>
+        </div>
+        <ol class="quick-guide" aria-label="Étapes de la démonstration">
+          <li><span>1</span> Saisir un motif fictif</li>
+          <li><span>2</span> Le modifier pour créer l’historique</li>
+          <li><span>3</span> Le confirmer ou le rejeter</li>
+        </ol>
+      </section>
+
+      <nav class="role-switcher" aria-label="Choisir le point de vue">
+        <button id="patient-tab" class="role-tab is-active" type="button" aria-controls="patient-panel" aria-pressed="true">
+          <span class="step-number">1</span>
+          <span><strong>Vue patient</strong><small>Transmettre le motif</small></span>
+        </button>
+        <button id="professional-tab" class="role-tab" type="button" aria-controls="professional-panel" aria-pressed="false">
+          <span class="step-number">2</span>
+          <span><strong>Vue équipe médicale</strong><small>Préparer la consultation</small></span>
+        </button>
+      </nav>
+
+      <div id="global-status" class="status-message" role="status" aria-live="polite"></div>
+
+      <section id="patient-panel" class="workspace" aria-labelledby="patient-title">
+        <div class="workspace-heading">
+          <div>
+            <p class="eyebrow">Patient fictif · consultation de démonstration</p>
+            <h2 id="patient-title">Quel est le motif de la consultation&nbsp;?</h2>
+          </div>
+          <span id="patient-progress" class="status-chip status-neutral">À compléter</span>
+        </div>
+
+        <form id="reason-form" class="reason-form">
+          <label for="reason">Motif fictif</label>
+          <textarea id="reason" name="reason" rows="5" maxlength="4000" required aria-describedby="reason-help reason-count" placeholder="Écrivez uniquement un exemple inventé…"></textarea>
+          <div class="field-footer">
+            <span id="reason-help">Une phrase suffit. Vous pourrez la modifier ensuite.</span>
+            <span id="reason-count">0 / 4000</span>
+          </div>
+          <div class="form-actions">
+            <button id="example-button" class="button button-secondary" type="button">Insérer un exemple fictif</button>
+            <button id="submit-reason" class="button button-primary" type="submit">Transmettre le motif</button>
+          </div>
+        </form>
+
+        <aside class="privacy-note">
+          <strong>Ce que TwinCare enregistre</strong>
+          <p>Le texte, son origine « déclaré par le patient », sa date et son historique. Aucune interprétation médicale n’est ajoutée.</p>
+        </aside>
+      </section>
+
+      <section id="professional-panel" class="workspace" aria-labelledby="professional-title" hidden>
+        <div class="workspace-heading">
+          <div>
+            <p class="eyebrow">Équipe médicale · avant la consultation</p>
+            <h2 id="professional-title">Contexte préparé</h2>
+          </div>
+          <button id="refresh-button" class="button button-quiet" type="button">Actualiser</button>
+        </div>
+
+        <div class="professional-grid">
+          <article class="card vignette-card">
+            <div class="card-heading">
+              <div>
+                <p class="card-label">Motif courant</p>
+                <h3>Vignette de consultation</h3>
+              </div>
+              <span id="review-chip" class="status-chip status-neutral">Non renseigné</span>
+            </div>
+            <blockquote id="current-reason" class="reason-quote">Le patient n’a pas encore transmis de motif.</blockquote>
+            <dl id="fact-metadata" class="metadata-list"></dl>
+            <div id="review-actions" class="review-actions" hidden>
+              <button id="confirm-button" class="button button-success" type="button">Confirmer</button>
+              <button id="reject-button" class="button button-danger" type="button">Rejeter</button>
+            </div>
+            <p id="review-guidance" class="review-guidance">Revenez à la vue patient pour transmettre un motif fictif.</p>
+          </article>
+
+          <article class="card preparation-card">
+            <p class="card-label">Préparation</p>
+            <h3>À vérifier avant la consultation</h3>
+            <ul id="preparation-items" class="preparation-list"></ul>
+            <div class="readiness-line">
+              <span>Niveau de préparation</span>
+              <strong id="readiness">Incomplet</strong>
+            </div>
+          </article>
+        </div>
+
+        <article class="card history-card">
+          <div class="card-heading">
+            <div>
+              <p class="card-label">Traçabilité utile</p>
+              <h3>Historique des formulations</h3>
+            </div>
+            <span id="history-count" class="count-pill">0 version antérieure</span>
+          </div>
+          <ol id="history-list" class="history-list"></ol>
+          <p id="empty-history" class="empty-state">Modifiez le motif côté patient pour voir apparaître l’ancienne formulation ici.</p>
+        </article>
+
+        <div class="export-row">
+          <div>
+            <strong>Contexte portable</strong>
+            <p>Téléchargez exactement le contrat <code>twincare.clinical-context.v1</code>.</p>
+          </div>
+          <a id="export-link" class="button button-secondary" href="/demo/api/export" download>Télécharger le JSON</a>
+        </div>
+      </section>
+
+      <footer class="demo-footer">
+        <span>La démonstration repart de zéro à chaque démarrage.</span>
+        <button id="reset-button" class="button button-quiet" type="button">Réinitialiser maintenant</button>
+      </footer>
+    </main>
+  </body>
+</html>

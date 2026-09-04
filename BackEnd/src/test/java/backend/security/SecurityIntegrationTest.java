@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDate;
@@ -119,6 +120,12 @@ class SecurityIntegrationTest {
         mockMvc.perform(get("/v3/api-docs")
                         .header("Authorization", bearerToken(users.get(Role.ADMIN))))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void demoSurfaceIsClosedOutsideTheDemoProfile() throws Exception {
+        mockMvc.perform(get("/demo/api/state"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

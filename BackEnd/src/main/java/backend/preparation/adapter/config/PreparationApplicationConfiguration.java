@@ -10,6 +10,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import backend.clinicalcontext.application.port.in.RecordPatientDeclaredReasonFactUseCase;
 import backend.preparation.application.port.in.CreatePreparationCaseUseCase;
 import backend.preparation.application.port.in.ClosePreparationCaseUseCase;
 import backend.preparation.application.port.in.GetProfessionalContextUseCase;
@@ -144,6 +145,7 @@ public class PreparationApplicationConfiguration {
             PatientReasonReader patientReasons,
             SecureTokenDigester tokenDigester,
             PreparationAuditEventStore auditEvents,
+            RecordPatientDeclaredReasonFactUseCase recordPatientDeclaredReasonFact,
             Clock preparationClock) {
         ResolvePatientAccessSessionUseCase resolve = new ResolvePatientAccessSessionService(
                 accessSessions, tokenDigester, preparationClock);
@@ -152,7 +154,12 @@ public class PreparationApplicationConfiguration {
         var end = new EndPatientAccessSessionService(
                 preparationCases, invitations, accessSessions, auditEvents, preparationClock);
         var patientReason = new RecordPatientReasonService(
-                preparationCases, invitations, accessSessions, auditEvents, preparationClock);
+                preparationCases,
+                invitations,
+                accessSessions,
+                auditEvents,
+                recordPatientDeclaredReasonFact,
+                preparationClock);
         return new TransactionalPatientSessionUseCases(resolve, end, getPatientReason, patientReason);
     }
 

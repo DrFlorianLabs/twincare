@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
+
 class PreparationCaseTest {
 
     private static final Instant CREATED_AT = Instant.parse("2026-08-21T08:00:00Z");

@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import backend.dto.AuthResponse;
+import backend.dto.PatientProvisioningResponse;
 import backend.dto.RegisterRequest;
 import backend.dto.ResetPasswordRequest;
 import backend.service.AuthService;
@@ -27,7 +27,7 @@ public class LegacyAccountAdministrationController {
     }
 
     @PostMapping("/register")
-    public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
+    public PatientProvisioningResponse register(@Valid @RequestBody RegisterRequest request) {
         return authService.register(request);
     }
 

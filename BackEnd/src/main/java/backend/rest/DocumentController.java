@@ -18,16 +18,19 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.validation.annotation.Validated;
 
 import backend.dto.DocumentContent;
 import backend.dto.DocumentUploadRequest;
 import backend.entity.Document;
 import backend.entity.TypeDocument;
 import backend.service.DocumentService;
+import jakarta.validation.constraints.Size;
 
 @Profile("legacy-prototype")
 @RestController
 @RequestMapping("/api/documents")
+@Validated
 public class DocumentController {
 
     private final DocumentService documentService;
@@ -43,8 +46,8 @@ public class DocumentController {
             @RequestParam("type") TypeDocument type,
             @RequestParam("dateDocument")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateDocument,
-            @RequestParam(value = "prescripteur", required = false) String prescripteur,
-            @RequestParam(value = "commentairePatient", required = false) String commentairePatient) {
+            @RequestParam(value = "prescripteur", required = false) @Size(max = 255) String prescripteur,
+            @RequestParam(value = "commentairePatient", required = false) @Size(max = 1000) String commentairePatient) {
 
         DocumentUploadRequest request = new DocumentUploadRequest();
         request.setType(type);

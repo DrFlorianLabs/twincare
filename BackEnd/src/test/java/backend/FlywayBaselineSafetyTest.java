@@ -142,12 +142,25 @@ class FlywayBaselineSafetyTest {
         try (var connection = DriverManager.getConnection(url, "sa", "");
                 var statement = connection.createStatement();
                 var result = statement.executeQuery("""
-                        SELECT patient_reason
+                        SELECT preparation_case.patient_reason,
+                               clinical_fact.text_value,
+                               clinical_fact.provenance,
+                               clinical_fact.certainty,
+                               clinical_fact.lifecycle_status,
+                               clinical_fact.review_status
                         FROM preparation_case
-                        WHERE organization_id = 'synthetic-v6-org'
+                        JOIN clinical_fact
+                          ON clinical_fact.preparation_case_id = preparation_case.id
+                         AND clinical_fact.organization_id = preparation_case.organization_id
+                        WHERE preparation_case.organization_id = 'synthetic-v6-org'
                         """)) {
             assertThat(result.next()).isTrue();
             assertThat(result.getString(1)).isEqualTo("Motif synthétique préexistant");
+            assertThat(result.getString(2)).isEqualTo("Motif synthétique préexistant");
+            assertThat(result.getString(3)).isEqualTo("PATIENT_DECLARED");
+            assertThat(result.getString(4)).isEqualTo("NOT_ASSESSED");
+            assertThat(result.getString(5)).isEqualTo("CURRENT");
+            assertThat(result.getString(6)).isEqualTo("UNREVIEWED");
         }
     }
 
@@ -416,6 +429,13 @@ class FlywayBaselineSafetyTest {
         try (var connection = DriverManager.getConnection(url, "sa", "");
                 var statement = connection.createStatement();
                 var result = statement.executeQuery("SELECT COUNT(*) FROM preparation_attachment")) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getInt(1)).isZero();
+        }
+
+        try (var connection = DriverManager.getConnection(url, "sa", "");
+                var statement = connection.createStatement();
+                var result = statement.executeQuery("SELECT COUNT(*) FROM clinical_fact")) {
             assertThat(result.next()).isTrue();
             assertThat(result.getInt(1)).isZero();
         }

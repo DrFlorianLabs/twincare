@@ -43,7 +43,7 @@ class PreparationSchemaValidationTest {
                 """,
                 String.class);
 
-        assertThat(version).isEqualTo("12");
+        assertThat(version).isEqualTo("13");
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM patient_invitation", Integer.class))
                 .isZero();
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM patient_access_session", Integer.class))
@@ -58,6 +58,8 @@ class PreparationSchemaValidationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM preparation_case_closure", Integer.class))
                 .isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM clinical_fact", Integer.class))
+                .isZero();
     }
 
     @Configuration(proxyBeanMethods = false)
@@ -66,10 +68,12 @@ class PreparationSchemaValidationTest {
             UserDetailsServiceAutoConfiguration.class
     })
     @EntityScan(basePackages = {
+            "backend.clinicalcontext.adapter.out.persistence",
             "backend.preparation.adapter.out.persistence",
             "backend.preparation.adapter.out.security"
     })
     @EnableJpaRepositories(basePackages = {
+            "backend.clinicalcontext.adapter.out.persistence",
             "backend.preparation.adapter.out.persistence",
             "backend.preparation.adapter.out.security"
     })

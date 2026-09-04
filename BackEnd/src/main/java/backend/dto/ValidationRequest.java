@@ -12,14 +12,6 @@ public class ValidationRequest {
     @Size(max = 1000)
     private String commentaire;
 
-    /**
-     * Deprecated compatibility field for the historical frontend. The backend
-     * deliberately ignores it and derives the validation actor exclusively
-     * from the authenticated security context.
-     */
-    @Deprecated
-    private Long assistantMedicalId;
-
     public DecisionValidation getDecision() {
         return decision;
     }
@@ -36,13 +28,4 @@ public class ValidationRequest {
         this.commentaire = commentaire;
     }
 
-    @Deprecated
-    public Long getAssistantMedicalId() {
-        return assistantMedicalId;
-    }
-
-    @Deprecated
-    public void setAssistantMedicalId(Long assistantMedicalId) {
-        this.assistantMedicalId = assistantMedicalId;
-    }
 }

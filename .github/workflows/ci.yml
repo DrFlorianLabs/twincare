@@ -23,8 +23,10 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - name: Test
-        run: sh ./mvnw --batch-mode --no-transfer-progress test
+      - name: Test and verify
+        run: sh ./mvnw --batch-mode --no-transfer-progress clean verify
+      - name: Package the isolated demo profile
+        run: sh ./mvnw --batch-mode --no-transfer-progress -Pdemo -DskipTests clean package
 
   frontend:
     name: Frontend build (${{ matrix.app }})
@@ -36,9 +38,11 @@ jobs:
           - app: patient
             directory: FrontEnd/app_twin-care
             lockfile: FrontEnd/app_twin-care/package-lock.json
+            typecheck: true
           - app: back-office
             directory: FrontEnd/back-office_twin-care
             lockfile: FrontEnd/back-office_twin-care/package-lock.json
+            typecheck: false
     defaults:
       run:
         working-directory: ${{ matrix.directory }}
@@ -59,5 +63,11 @@ jobs:
       - name: Patient journey unit tests
         if: matrix.app == 'patient'
         run: npm test
+      - name: Type-check patient application
+        if: matrix.typecheck
+        run: npm run type-check
+      - name: Check integrated demo JavaScript
+        if: matrix.app == 'patient'
+        run: node --check ../../BackEnd/src/main/resources/static/demo/app.js
       - name: Build
         run: npm run build

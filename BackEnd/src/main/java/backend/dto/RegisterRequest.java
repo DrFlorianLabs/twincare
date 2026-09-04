@@ -8,14 +8,20 @@ import jakarta.validation.constraints.*;
 
 public class RegisterRequest {
     @NotBlank
+    @Size(max = 100)
     private String nom;
     @NotBlank
+    @Size(max = 100)
     private String prenom;
     @NotNull
+    @Past
     private LocalDate dateNaissance;
-    @NotBlank @Email
+    @NotBlank
+    @Email
+    @Size(max = 150)
     private String email;
     @NotBlank
+    @Size(min = 12, max = 128)
     private String motDePasse;
     @NotNull
     private Role role;

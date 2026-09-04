@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
+import backend.clinicalcontext.application.port.in.RecordPatientDeclaredReasonFactCommand;
 import backend.preparation.application.InvalidPatientReasonCommandException;
 import backend.preparation.application.PatientSessionUnavailableException;
 import backend.preparation.application.port.in.PatientAccessGrant;
@@ -31,6 +32,8 @@ import backend.preparation.domain.PatientAccessSession;
 import backend.preparation.domain.PatientInvitation;
 import backend.preparation.domain.PatientInvitationId;
 import backend.preparation.domain.PatientReference;
+import backend.preparation.domain.PreparationAuditEvent;
+import backend.preparation.domain.PreparationAuditEventType;
 import backend.preparation.domain.PreparationCase;
 import backend.preparation.domain.PreparationCaseId;
 import backend.preparation.domain.PreparationCaseStatus;
@@ -55,6 +58,16 @@ class PatientReasonServiceTest {
             assertThat(reason.recordedAt()).isEqualTo(NOW);
         });
         assertThat(fixture.cases.updateCount).isOne();
+        assertThat(fixture.recordedFacts).singleElement().satisfies(fact -> {
+            assertThat(fact.contextId().value()).isEqualTo(fixture.caseId.value());
+            assertThat(fact.owner().value()).isEqualTo(fixture.organizationId.value());
+            assertThat(fact.text()).isEqualTo("Fatigue depuis trois semaines");
+            assertThat(fact.recordedAt()).isEqualTo(NOW);
+        });
+        assertThat(fixture.recordedAuditEvents).singleElement().satisfies(event -> {
+            assertThat(event.type()).isEqualTo(PreparationAuditEventType.PATIENT_REASON_RECORDED);
+            assertThat(event.caseRevision()).isEqualTo(1L);
+        });
     }
 
     @Test
@@ -66,6 +79,8 @@ class PatientReasonServiceTest {
         fixture.service.record(new RecordPatientReasonCommand(fixture.grant, "  Motif synthétique "));
 
         assertThat(fixture.cases.updateCount).isOne();
+        assertThat(fixture.recordedFacts).hasSize(1);
+        assertThat(fixture.recordedAuditEvents).hasSize(1);
         assertThat(fixture.preparationCase.releaseDomainEvents()).isEmpty();
     }
 
@@ -118,6 +133,8 @@ class PatientReasonServiceTest {
         private final InMemoryCaseRepository cases;
         private final RecordPatientReasonService service;
         private final List<String> operations = new ArrayList<>();
+        private final List<RecordPatientDeclaredReasonFactCommand> recordedFacts = new ArrayList<>();
+        private final List<PreparationAuditEvent> recordedAuditEvents = new ArrayList<>();
 
         private Fixture() {
             preparationCase = PreparationCase.create(
@@ -150,7 +167,8 @@ class PatientReasonServiceTest {
                     cases,
                     new InMemoryInvitationRepository(invitation, operations),
                     new InMemorySessionRepository(session, operations),
-                    event -> { },
+                    recordedAuditEvents::add,
+                    recordedFacts::add,
                     new RecordingClock(operations));
         }
     }

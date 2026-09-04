@@ -5,6 +5,10 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
+import backend.clinicalcontext.application.port.in.RecordPatientDeclaredReasonFactCommand;
+import backend.clinicalcontext.application.port.in.RecordPatientDeclaredReasonFactUseCase;
+import backend.clinicalcontext.domain.ClinicalContextId;
+import backend.clinicalcontext.domain.ClinicalContextOwner;
 import backend.preparation.application.PatientSessionUnavailableException;
 import backend.preparation.application.port.in.PatientAccessGrant;
 import backend.preparation.application.port.in.RecordPatientReasonCommand;
@@ -27,6 +31,7 @@ public final class RecordPatientReasonService implements RecordPatientReasonUseC
     private final PatientInvitationRepository invitations;
     private final PatientAccessSessionRepository sessions;
     private final PreparationAuditEventStore auditEvents;
+    private final RecordPatientDeclaredReasonFactUseCase recordClinicalFact;
     private final Clock clock;
 
     public RecordPatientReasonService(
@@ -34,11 +39,13 @@ public final class RecordPatientReasonService implements RecordPatientReasonUseC
             PatientInvitationRepository invitations,
             PatientAccessSessionRepository sessions,
             PreparationAuditEventStore auditEvents,
+            RecordPatientDeclaredReasonFactUseCase recordClinicalFact,
             Clock clock) {
         this.preparationCases = Objects.requireNonNull(preparationCases);
         this.invitations = Objects.requireNonNull(invitations);
         this.sessions = Objects.requireNonNull(sessions);
         this.auditEvents = Objects.requireNonNull(auditEvents);
+        this.recordClinicalFact = Objects.requireNonNull(recordClinicalFact);
         this.clock = Objects.requireNonNull(clock);
     }
 
@@ -50,6 +57,12 @@ public final class RecordPatientReasonService implements RecordPatientReasonUseC
         requireActiveAt(grant, lockedScope, now);
         if (lockedScope.preparationCase().recordPatientReason(command.reason(), now)) {
             long persistedRevision = preparationCases.update(lockedScope.preparationCase());
+            var statement = lockedScope.preparationCase().patientReason().orElseThrow();
+            recordClinicalFact.record(new RecordPatientDeclaredReasonFactCommand(
+                    new ClinicalContextId(lockedScope.preparationCase().id().value()),
+                    new ClinicalContextOwner(lockedScope.preparationCase().organizationId().value()),
+                    statement.text(),
+                    statement.recordedAt()));
             auditEvents.append(PreparationAuditEvent.patient(
                     lockedScope.preparationCase().organizationId(),
                     lockedScope.preparationCase().id(),

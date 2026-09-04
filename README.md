@@ -1,74 +1,84 @@
-# TwinCare
+# TwinCare — préparation de consultation
 
-TwinCare est une couche de préparation de consultation pour les soins primaires.
+TwinCare aide le patient et l'équipe de soins à préparer une consultation déjà
+planifiée. La tranche actuelle recueille le motif de consultation, conserve ses
+corrections avec leur provenance, permet une validation humaine et exporte un
+contexte clinique portable. Elle ne pose pas de diagnostic, ne recommande pas de
+traitement et ne remplace pas le logiciel métier.
 
-## Promesse produit
+> **Données fictives uniquement.** La démonstration locale efface et recrée son
+> scénario synthétique. N'y saisir aucune donnée réelle.
 
-> Préparer la consultation avant que le patient entre dans le cabinet.
+## Essai local sur Mac — moins de 10 minutes
 
-TwinCare intervient après la prise de rendez-vous et avant la consultation. Le patient reçoit un lien, décrit naturellement sa demande, transmet les documents utiles et répond uniquement aux questions nécessaires. TwinCare structure ces informations, identifie les éléments manquants ou les tâches préparatoires et fournit au professionnel une vignette clinique concise.
+Prérequis : macOS et Java 21. Aucun compte, secret, Docker, base externe ou
+service cloud n'est nécessaire.
 
-Le produit vise d'abord à réduire le temps médical perdu à reconstruire le contexte, rechercher des documents et réaliser pendant la consultation des tâches qui auraient pu être anticipées.
+1. Double-cliquer sur **Lancer TwinCare Demo.command**. Au premier lancement,
+   macOS peut demander un clic droit puis **Ouvrir**.
+2. Le navigateur ouvre <http://127.0.0.1:8088/demo/>.
+3. Dans **Vue patient**, saisir ou choisir un motif fictif, puis l'envoyer et le
+   corriger une fois.
+4. Dans **Vue équipe de soins**, contrôler la valeur actuelle, sa date, sa
+   provenance, son degré de certitude et l'historique, puis confirmer ou rejeter
+   le fait.
+5. Exporter le contexte JSON v1. Utiliser **Réinitialiser la démo** pour rejouer
+   le scénario et **Arrêter la démo** en fin d'essai.
 
-## V0.1
+Les trois commandes Mac à la racine servent respectivement à lancer, arrêter et
+réinitialiser la démonstration. Le lancement écoute uniquement sur la boucle
+locale, utilise une base H2 isolée et génère ses secrets éphémères sans les
+afficher.
 
-Le périmètre de référence est le module amont :
+## Architecture en bref
 
-1. rendez-vous déjà pris ;
-2. invitation du patient ;
-3. recueil conversationnel léger ;
-4. dépôt simple de documents ;
-5. questions ou instruments cliniques validés lorsque pertinents ;
-6. identification des informations manquantes et tâches préparatoires ;
-7. intervention humaine uniquement lorsque nécessaire ;
-8. vignette clinique courte avant consultation ;
-9. clôture après consultation pour l'aigu.
+- `BackEnd/` : monolithe modulaire Java 21 / Spring Boot. Le noyau
+  `clinicalcontext` sépare domaine, application, persistance et API.
+- `FrontEnd/app_twin-care/` : parcours patient Vue 3 sécurisé et borné au cas.
+- `FrontEnd/back-office_twin-care/` : espace professionnel Vue 3.
+- `BackEnd/src/main/resources/static/demo/` : interface d'essai intégrée, sans
+  dépendance Node ni service externe.
+- `docs/ARCHITECTURE.md` : frontière produit, modèle et décisions durables.
+- `docs/SECURITY_BASELINE.md` : règles de sécurité et de confidentialité.
 
-Le suivi longitudinal des maladies chroniques reste un horizon produit ultérieur. Les modules historiques de parcours et de santé environnementale ne pilotent pas la V0.1.
+La démonstration utilise le même domaine, les mêmes migrations et la même
+persistance de faits cliniques que l'application. Seuls l'autorisation et le jeu
+de données sont remplacés par des adaptateurs locaux actifs sous le profil
+`demo`.
 
-## Principes d'architecture
+## Développement
 
-- **Human-first** : aucune décision diagnostique ou thérapeutique autonome.
-- **Local-first** : le coeur fonctionnel ne dépend d'aucune API tierce.
-- **Ports / adaptateurs** : agendas, notifications, logiciels métier et moteurs IA sont des intégrations remplaçables.
-- **Déterministe au coeur** : états, règles métier, instruments cliniques et tâches sont explicites, versionnés et testables.
-- **IA aux frontières** : compréhension du langage, extraction documentaire et synthèse peuvent utiliser une implémentation locale derrière une interface stable.
-- **Privacy by design** : aucun document de santé dans Git, aucun contenu de santé dans les logs, accès documentaire authentifié et autorisé.
-- **Zéro friction** : le patient donne un maximum d'information utile avec un minimum d'effort perçu.
+Backend :
 
-## Documentation normative
+```sh
+cd BackEnd
+JAVA_HOME=$(/usr/libexec/java_home -v 21) ./mvnw clean verify
+```
 
-- [`docs/PRODUCT_SCOPE_V0.1.md`](docs/PRODUCT_SCOPE_V0.1.md) — périmètre produit courant.
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture cible et frontières.
-- [`docs/SECURITY_BASELINE.md`](docs/SECURITY_BASELINE.md) — exigences minimales de sécurité et de confidentialité.
-- [`docs/SPRINT_0.md`](docs/SPRINT_0.md) — objectifs et critères de sortie du Sprint 0.
-- [`docs/ROADMAP_V0.1.md`](docs/ROADMAP_V0.1.md) — feuille de route active de TwinCare Consultation.
-- [`docs/ORGANIZATION_BOOTSTRAP.md`](docs/ORGANIZATION_BOOTSTRAP.md) — amorçage contrôlé d'une organisation sans tenant par défaut.
-- [`docs/adr/0001-organization-membership-and-scope.md`](docs/adr/0001-organization-membership-and-scope.md) — décision d'isolation organisationnelle du nouveau module.
-- [`docs/adr/0002-patient-invitation-credential-exchange.md`](docs/adr/0002-patient-invitation-credential-exchange.md) — invitation patient à usage unique et session bornée.
-- [`docs/adr/0003-patient-session-authentication-and-csrf.md`](docs/adr/0003-patient-session-authentication-and-csrf.md) — authentification de session patient et protection CSRF.
-- [`docs/adr/0004-patient-declared-consultation-reason.md`](docs/adr/0004-patient-declared-consultation-reason.md) — motif libre déclaré par le patient et écriture transactionnelle.
-- [`docs/adr/0005-patient-preparation-attachment.md`](docs/adr/0005-patient-preparation-attachment.md) — pièce jointe patient bornée, stockage privé et cohérence transactionnelle.
-- [`docs/adr/0006-deterministic-readiness-and-professional-view.md`](docs/adr/0006-deterministic-readiness-and-professional-view.md) — règles de préparation déterministes et vignette professionnelle structurée.
-- [`docs/adr/0007-human-preparation-tasks-and-ready-confirmation.md`](docs/adr/0007-human-preparation-tasks-and-ready-confirmation.md) — tâches humaines et confirmation médicale liée à la version effectivement relue.
-- [`docs/adr/0008-professional-attachment-download.md`](docs/adr/0008-professional-attachment-download.md) — téléchargement professionnel authentifié, vérifié et borné.
-- [`docs/adr/0009-professional-context-discovery.md`](docs/adr/0009-professional-context-discovery.md) — découverte serveur des organisations et capacités cliniques du professionnel.
-- [`docs/adr/0010-professional-preparation-workspace.md`](docs/adr/0010-professional-preparation-workspace.md) — espace professionnel minimal, sans persistance locale de contenu clinique.
-- [`docs/adr/0011-append-only-preparation-audit.md`](docs/adr/0011-append-only-preparation-audit.md) — chronologie de préparation append-only, minimisée et protégée.
-- [`docs/adr/0012-explicit-preparation-case-closure.md`](docs/adr/0012-explicit-preparation-case-closure.md) — clôture médicale explicite, preuve immuable et révocation des accès patients.
-- [`docs/adr/0013-patient-reason-resume-read.md`](docs/adr/0013-patient-reason-resume-read.md) — reprise sécurisée du motif patient dans la session bornée au cas.
-- [`docs/adr/0014-manual-professional-start-and-invitation-handoff.md`](docs/adr/0014-manual-professional-start-and-invitation-handoff.md) — démarrage professionnel idempotent et remise locale du lien patient.
-- [`docs/adr/0015-active-v01-api-allowlist.md`](docs/adr/0015-active-v01-api-allowlist.md) — surface HTTP V0.1 explicitement autorisée et double barrière contre les API historiques.
+Interface patient :
 
-Les prototypes, captures et documents historiques présents dans `artifacts/` documentent l'origine du projet mais ne constituent pas la spécification fonctionnelle courante.
+```sh
+cd FrontEnd/app_twin-care
+npm ci
+npm test
+npm run type-check
+npm run build
+```
 
-## Structure du dépôt
+Interface équipe de soins :
 
-- `BackEnd/` : Spring Boot / Java 21 / PostgreSQL / Flyway.
-- `FrontEnd/app_twin-care/` : interface patient Vue.
-- `FrontEnd/back-office_twin-care/` : interface professionnelle Vue.
-- `artifacts/` : artefacts historiques de prototype et de présentation.
+```sh
+cd FrontEnd/back-office_twin-care
+npm ci
+npm run test:unit
+npm run build
+```
 
-## Statut
+L'application normale exige des secrets explicites et une base PostgreSQL. Le
+profil `demo` est le seul à embarquer H2 et refuse son initialisation s'il n'est
+pas lié à `127.0.0.1` ou si sa source de données n'est pas la base de démo
+attendue.
 
-Prototype en consolidation. Ne pas utiliser avec des données réelles de santé tant que les critères de sécurité, de conformité, d'hébergement et de validation clinique nécessaires au contexte de déploiement ne sont pas satisfaits.
+Toute contribution doit respecter `AGENTS.md`. Les fixtures doivent rester
+strictement synthétiques et aucun contenu patient ou identifiant ne doit être
+journalisé.

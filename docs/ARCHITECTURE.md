@@ -1,442 +1,204 @@
-# TwinCare — Architecture cible V0.1
+# Architecture TwinCare V0.1
+
+Statut : document normatif. Dernière mise à jour : 4 septembre 2026.
 
-Status: **normative direction**, implementation progressive.
+## Frontière produit et test de valeur
+
+TwinCare prépare une consultation déjà réservée, entre la prise de rendez-vous
+et l'entrée du patient chez le médecin. Il réduit le temps perdu à retrouver un
+motif fiable, des documents et les actions de préparation encore ouvertes.
+
+La première tranche du Clinical Context Engine répond au test produit suivant :
+
+- **problème** : le motif patient corrigé perd facilement son origine, sa date
+  ou la trace de la valeur qu'il remplace ;
+- **utilisateurs** : patient contributeur, assistant médical et médecin ;
+- **moment** : collecte en amont, puis revue juste avant la consultation ;
+- **gain visé** : moins de ressaisie et de vérifications, avec une meilleure
+  qualité du contexte présenté ;
+- **intégration** : API et export JSON portables, sans imposer le remplacement du
+  logiciel métier.
 
-## 1. Architecture decision
+V0.1 n'est ni un EHR, ni un portail patient généraliste, ni un moteur de
+diagnostic, ni une plateforme d'agents. Les termes et règles cliniques non
+validés restent hors du produit.
 
-TwinCare uses a modular monolith for V0.1. The product does not need microservices, an agent framework or an event platform to prove value.
+## Forme générale
+
+Le backend est un monolithe modulaire Java 21 / Spring Boot. Les modules suivent
+une séparation domaine, application, ports, adaptateurs de persistance et API.
+Les fournisseurs externes restent derrière des ports appartenant au produit ;
+le parcours essentiel dispose d'un fonctionnement local et manuel.
 
-The architecture must preserve four properties:
+`PreparationCase` représente un épisode de préparation pour une consultation,
+pas le dossier médical longitudinal d'une personne. Il porte une organisation,
+une référence patient opaque, une référence de rendez-vous facultative, une
+échéance facultative, un état et une révision monotone.
 
-1. the clinical/workflow core is deterministic and testable;
-2. external vendors are adapters, never hard dependencies;
-3. AI capabilities are replaceable implementations behind ports;
-4. health data access is explicit, authenticated, authorized and auditable.
+Les concepts historiques `DossierPatient`, chatbot et administration de comptes
+ne doivent pas être étendus. Leurs contrôleurs sont absents de l'exécution V0.1
+normale et enfermés derrière le profil inactif `legacy-prototype`.
 
-## 2. Core domain
-
-The primary aggregate should converge toward `PreparationCase` (working name).
-
-One preparation case represents **one consultation preparation episode**, not the patient's complete medical record.
-
-Conceptual fields:
-
-- `id` — internal opaque identifier;
-- `patientRef` — internal patient reference;
-- `appointmentRef` — optional opaque reference to an appointment source;
-- `scheduledAt` — consultation date/time when known;
-- `status` — explicit state machine;
-- `reasonFreeText` — initial patient wording;
-- `structuredFacts` — typed facts with provenance;
-- `attachments` — protected document references;
-- `clinicalMeasures` — versioned validated instrument results;
-- `preparationTasks` — actions to complete before consultation;
-- `vignette` — concise derived read model;
-- timestamps and audit metadata.
-
-`DossierPatient` is an inherited prototype concept. Do not expand it as a competing EHR. New work should move semantics toward a consultation preparation case.
-
-## 3. State machine
-
-The exact states may evolve, but transitions must be explicit. A suitable starting model is:
-
-`CREATED -> PATIENT_STARTED -> COLLECTING -> READY_FOR_REVIEW | NEEDS_ACTION -> READY_FOR_CONSULTATION -> CLOSED`
-
-Exceptional states:
-
-`EXPIRED`, `CANCELLED`, `BLOCKED`
-
-No LLM is allowed to mutate state directly. A model may propose structured information; application/domain code validates the proposal and performs the transition.
-
-## 4. Ports and adapters
-
-The core defines interfaces; adapters implement them.
-
-### Appointment source
-
-`AppointmentSourcePort`
-
-Possible adapters:
-
-- manual/local import — required baseline;
-- CSV/PDF import — possible transitional adapter;
-- vendor API adapter — optional future integration.
-
-### Patient notification
-
-`NotificationPort`
-
-Core behavior must not depend on a particular SMS/email provider. Development and pilot modes can expose/copy the preparation link locally.
-
-### Clinical context
-
-`ClinicalContextPort`
-
-Possible sources:
-
-- locally accumulated TwinCare context;
-- manual PDF export from a practice-management system;
-- future EHR connector.
-
-The domain consumes a normalized internal representation, never vendor-specific objects.
-
-### Language understanding
-
-`LanguageUnderstandingPort`
-
-Implementations may include:
-
-- deterministic/local parser for limited cases;
-- local model;
-- explicitly configured external model if compliance and deployment policy allow it later.
-
-The core must run without an external model.
-
-### Document understanding
-
-`DocumentUnderstandingPort`
-
-Same replacement rule: local/no-op implementation is always possible. Raw health documents are never implicitly sent to a third party.
-
-### Task scheduling
-
-`PreparationTaskPort`
-
-V0.1 baseline is an internal task queue. Calendar integration is an adapter. If a calendar API is unavailable, the task still exists and remains actionable inside TwinCare.
-
-## 4.1 Organization ownership
-
-The organization boundary for the new consultation-preparation module is
-defined in [`adr/0001-organization-membership-and-scope.md`](adr/0001-organization-membership-and-scope.md).
-Its controlled initial provisioning procedure is
-[`ORGANIZATION_BOOTSTRAP.md`](ORGANIZATION_BOOTSTRAP.md). This isolation does not
-retroactively make the historical prototype routes suitable for real patient
-data.
-
-## 4.2 Patient invitation boundary
-
-The patient invitation and credential exchange are defined in
-[`adr/0002-patient-invitation-credential-exchange.md`](adr/0002-patient-invitation-credential-exchange.md).
-An invitation is a one-time bootstrap credential for exactly one preparation
-case; it is not the continuing patient session, proof of identity or consent.
-Both invitation and session secrets are stored only as domain-separated keyed
-digests. Expiry, consumption, revocation, case transition and session creation
-are server-controlled and transactional.
-
-## 4.3 Patient session boundary
-
-Patient cookie authentication and CSRF are defined in
-[`adr/0003-patient-session-authentication-and-csrf.md`](adr/0003-patient-session-authentication-and-csrf.md).
-The patient namespace uses a dedicated security chain without JWT
-authentication. A server-derived grant resolves to exactly one active
-preparation case; the browser never selects its organization, case or scope.
-Every clinical write must revalidate that grant inside the write transaction.
-
-## 4.4 Patient contribution boundary
-
-The first clinical write is defined in
-[`adr/0004-patient-declared-consultation-reason.md`](adr/0004-patient-declared-consultation-reason.md).
-It is one patient-declared statement owned by one `PreparationCase`. The
-browser supplies neither scope nor provenance. The use case revalidates the
-session after acquiring the shared case, invitation and session locks, and no
-clinical text enters ordinary logs or security events.
-
-## 4.5 Patient attachment boundary
-
-The bounded patient attachment capability is defined in
-[`adr/0005-patient-preparation-attachment.md`](adr/0005-patient-preparation-attachment.md).
-It is a separate `PreparationAttachment` owned by exactly one organization and
-one `PreparationCase`; it does not reuse or enlarge the historical dossier and
-document model. V0.1 currently permits one optional PDF, JPEG or PNG of at most
-10 MiB. The patient API exposes metadata only and derives every scope identifier
-and the `PATIENT_UPLOADED` provenance on the server.
-
-Raw bytes are behind a TwinCare-owned storage port. The local adapter uses an
-opaque key in a dedicated private root, stages bytes before the database
-transaction and coordinates promotion, replacement and deletion with commit or
-rollback callbacks. Startup reconciliation repairs interrupted operations and
-fails closed when metadata references missing bytes or cleanup cannot be
-completed. Multipart parser temporary files use a separate private directory;
-they never enter the historical upload root or Git.
-
-## 4.6 Deterministic readiness and professional read model
-
-The professional worklist and structured preparation view are defined in
-[`adr/0006-deterministic-readiness-and-professional-view.md`](adr/0006-deterministic-readiness-and-professional-view.md).
-Readiness is a pure, explicit and versioned policy. It does not interpret
-patient prose, infer clinical requirements or depend on an LLM. An optional
-attachment being absent is never itself a blocker.
-
-The professional vignette is assembled at read time from tenant-scoped data; it
-is not a stored narrative. The bounded list omits full patient free text and
-uses a joined projection to avoid N+1 document lookups. The detailed view
-returns the exact human-entered facts and safe attachment metadata with
-`Cache-Control: no-store`.
-
-Clinical access is capability-based. Active clinicians and medical assistants
-may view preparation data; organization administrators have no clinical access
-by default. Authorization happens before each query and every case lookup is
-scoped by both organization and case identifiers.
-
-## 4.7 Human task and confirmation boundary
-
-Human preparation tasks and clinician confirmation are defined in
-[`adr/0007-human-preparation-tasks-and-ready-confirmation.md`](adr/0007-human-preparation-tasks-and-ready-confirmation.md).
-A task is an explicit human action, never a clinical inference from prose or an
-absent optional document. It belongs to exactly one organization and case and
-is assigned to an active clinician or medical assistant in that organization.
-
-All task and confirmation mutations serialize on the owning case. The case
-revision is the optimistic review token exposed to the professional: reason,
-task and attachment changes advance it, while no-op retries do not. A clinician
-confirmation must provide the revision that was actually reviewed and stores
-that revision with its server-derived actor, time and readiness-rule version.
-This prevents a stale professional screen from confirming unseen changes.
-The read path independently verifies that the current revision is exactly the
-confirmed revision plus the confirmation transition, that the reviewed reason
-timestamp still matches and that no task is open. Its multi-query detailed view
-uses repeatable-read isolation to avoid mixing two concurrent states.
-
-Task management is available to active clinicians and medical assistants;
-ready confirmation is clinician-only. Organization administrators have neither
-capability by default. The read model returns task labels only in the detailed
-view, never in the bounded worklist or ordinary logs.
-
-## 4.8 Professional attachment download boundary
-
-The authenticated byte path is defined in
-[`adr/0008-professional-attachment-download.md`](adr/0008-professional-attachment-download.md).
-It requires the dedicated `DOWNLOAD_ATTACHMENT` capability before any case,
-metadata or storage read. Case and attachment are resolved under their shared
-tenant scope and locked in that order, matching patient replace/delete.
-
-The private-storage adapter opens the opaque final object once with symlink
-following disabled and verifies actual size plus SHA-256 on that same file
-channel. The verified handle is pinned before the transaction ends; the HTTP
-layer streams it after locks and the database connection have been released.
-It never lazily reopens a path that a concurrent replacement could move. The
-response is forced to download, uses only allowlisted MIME metadata, is
-`no-store`/`nosniff`, and exposes no key, digest or public URL.
-
-## 4.9 Professional context boundary
-
-The professional frontend discovers its active clinical organizations through
-`GET /api/v1/professional-context`. The server derives the actor and
-capabilities from the authenticated account plus active organization
-memberships; the request accepts no role, actor or organization input.
-
-The returned capabilities only control presentation. Every downstream use case
-repeats its own authorization before reading preparation data. Inactive and
-administrative-only memberships are omitted, and the response contains no
-patient or preparation data. See
-[`adr/0009-professional-context-discovery.md`](adr/0009-professional-context-discovery.md).
-
-## 4.10 Preparation audit boundary
-
-The durable workflow chronology is defined in
-[`adr/0011-append-only-preparation-audit.md`](adr/0011-append-only-preparation-audit.md).
-It is a small append-only store, not an event bus or event-sourcing platform.
-Every consequential preparation mutation records a typed, versioned and
-minimized event in the same database transaction; an audit failure rolls the
-mutation back.
-
-Audit events contain workflow metadata only. Patient wording, patient
-references, task labels, filenames, storage data, credentials and arbitrary
-payloads are forbidden. Events are sequenced per case under the existing case
-lock and retain the persisted case revision. The protected read API is
-tenant-scoped, cursor-paginated and clinician-only. Historical cases are never
-given a fabricated history: the read model explicitly reports when coverage
-does not begin at creation.
-
-## 4.11 Explicit closure boundary
-
-Explicit case closure is defined in
-[`adr/0012-explicit-preparation-case-closure.md`](adr/0012-explicit-preparation-case-closure.md).
-It is a clinician-only transition from `READY_FOR_CONSULTATION` to `CLOSED`,
-guarded by the exact ready-case revision and the persisted readiness evidence.
-
-The case, its invitations and its patient sessions are locked in deterministic
-order. Closure state, immutable closure evidence, defensive credential
-revocation and minimized audit events share one transaction. Exact replay is a
-no-op. Professional list and detail reads load and validate the tenant-scoped
-closure evidence; a closed status without the matching revision chain and
-timestamp fails closed. Reopening and automatic closure are outside V0.1.
-
-The professional client discovers the closure capability from server context
-and offers one explicit, human-confirmed action only for a trusted `READY`
-view. A revision conflict reloads the case but never retries the closure
-command automatically. Client capability checks improve the interface; the
-server use case remains the authorization boundary.
-
-## 4.12 Patient browser and reason-resume boundary
-
-The active V0.1 patient interface is a single-purpose preparation screen. It
-replaces the historical account/chatbot portal in the runtime entry point; the
-legacy sources may remain as historical artefacts but are not imported by the
-active application.
-
-The invitation secret is accepted only from an exact `#token=...` fragment and
-is removed with `history.replaceState` before the first API request. Query-string
-tokens, duplicate parameters and malformed fragments fail closed. The secret,
-patient session CSRF token and patient wording remain in memory only; the client
-uses neither `localStorage` nor `sessionStorage` and contains no analytics or
-third-party runtime call.
-
-Invitation exchange, cookie session restoration and reason write use the
-dedicated `/api/v1/patient-access/**` namespace. The patient-side resume read is
-defined in [`adr/0013-patient-reason-resume-read.md`](adr/0013-patient-reason-resume-read.md).
-It revalidates the full server-owned grant in one persistence query and returns
-only whether the current patient's statement exists, its exact text and its
-server timestamp. No tenant, case, patient or invitation identifier is accepted
-or returned.
-
-The browser never retries a reason mutation automatically. If a write fails,
-the draft remains only in volatile memory and a new attempt requires an explicit
-patient action. Network ambiguity during one-time invitation exchange is handled
-by trying the server cookie session before replaying the invitation. The useful
-core remains same-origin and provider-independent.
-
-## 4.13 Manual professional start boundary
-
-The provider-independent professional start is defined in
-[`adr/0014-manual-professional-start-and-invitation-handoff.md`](adr/0014-manual-professional-start-and-invitation-handoff.md).
-Case creation accepts a required client-generated UUID request identifier. The
-backend stores a versioned canonical payload fingerprint under the unique
-organization/request pair: an exact replay returns the same case without a
-second audit event, while reuse with different input fails with a conflict.
-The database uniqueness boundary makes concurrent identical requests converge
-on one case.
-
-The professional client discovers separate create-case and issue-invitation
-capabilities from the server, but each application use case authorizes the
-authenticated active clinical membership again. Creation and invitation remain
-two explicit commands so a failed handoff can resume on the persisted case.
-
-The invitation link uses a configured absolute HTTPS patient-application URL;
-plain HTTP is accepted only for exact loopback development hosts. It places the
-one-time credential only in an exact `#token=...` fragment. The professional
-browser keeps it in volatile memory, copies it only after an explicit action and
-clears it on every relevant scope or session change. The operating-system
-clipboard remains outside TwinCare's clearing boundary and is described as
-confidential. No notification or appointment provider is required by the core
-workflow.
-
-## 4.14 Active V0.1 runtime boundary
-
-The active API surface is defined in
-[`adr/0015-active-v01-api-allowlist.md`](adr/0015-active-v01-api-allowlist.md).
-The default Spring context maps only the provider-independent V0.1 preparation
-controllers. Prototype account administration, user, dossier, document,
-validation and chatbot controllers remain source artefacts behind an inactive
-legacy profile. The historical storage reconciliation listener is excluded from
-the default context so it cannot inspect legacy storage on application startup.
-
-HTTP security uses an explicit method-and-path allowlist for professional login,
-professional context, organization-scoped preparation operations and the
-dedicated patient-access chain. Every other `/api/v1/**`, historical `/api/**`,
-interactive documentation and unmatched request fails closed. This routing
-barrier supplements rather than replaces authorization inside application use
-cases. Enabling a legacy profile is not a supported V0.1 deployment mode.
-
-## 5. Provenance
-
-Every clinically relevant structured fact must retain provenance. Suggested categories:
-
-- `PATIENT_DECLARED`;
-- `DOCUMENT_EXTRACTED`;
-- `DOCUMENT_VERIFIED`;
-- `HUMAN_ENTERED`;
-- `IMPORTED_CONTEXT`;
-- `DERIVED_DETERMINISTIC`;
-- `AI_PROPOSED`.
-
-An AI-proposed fact is not silently promoted to verified fact.
-
-## 6. Clinical instruments
-
-Validated scales/questionnaires require a versioned catalog, separate from generic conversational prompts.
-
-Each catalog entry should eventually store:
-
-- stable identifier and version;
-- indication/context;
-- population constraints;
-- source/reference metadata;
-- wording and answer options;
-- scoring function;
-- interpretation metadata;
-- licensing/usage constraints;
-- clinical reviewer and validation date.
-
-Scoring is deterministic code with tests. The conversational layer may decide to offer an instrument only through explicit, versioned rules.
-
-## 7. Document boundary
-
-Documents are sensitive objects, not static web assets.
-
-Rules:
-
-- storage keys are internal and not used as authorization tokens;
-- document content is fetched by document ID through an authenticated endpoint;
-- authorization checks link the authenticated user to the document's preparation/patient context;
-- MIME type and file signature are validated on upload;
-- repository and logs never contain document content;
-- deletion removes both metadata and stored bytes or emits a recoverable cleanup task;
-- parser temporary files are isolated in a private, access-restricted runtime directory;
-- storage implementation remains replaceable by local/HDS-compatible object storage later.
-
-## 8. Frontend boundary
-
-Patient UI and professional UI may remain separate deployable frontends for now, but they share the same versioned HTTP API contract.
-
-No frontend contains a hard-coded production provider URL. API origin is relative by default and configurable through environment configuration.
-
-The professional frontend discovers its active organisations and advisory UI
-capabilities through the server-owned `/api/v1/professional-context` endpoint.
-It never derives authorization from a route, a locally stored role or a client
-supplied actor. Every clinical read and command remains authorized again by the
-backend.
-
-The V0.1 workspace is deliberately a thin task-oriented client over the
-professional read model. It does not call the historical dossier, document,
-user or chatbot APIs; does not compute readiness; and does not persist patient
-reason, task labels, attachment metadata or response bodies in browser storage.
-Concurrent organisation/case changes cancel and supersede pending reads so a
-late response cannot repopulate another tenant's screen.
-
-## 9. Error handling and observability
-
-- Errors exposed to clients are typed and do not leak stack traces or filesystem paths.
-- Logs contain event type, technical correlation IDs and non-sensitive operational metadata only.
-- Never log free-text patient content, document names/content, clinical scores attached to an identifiable patient, email addresses or access tokens.
-- Security/audit events are a distinct concern from application logs. The
-  preparation audit is persisted atomically and is never reconstructed from
-  ordinary log output.
-
-## 10. Dependency policy
-
-A new runtime dependency is accepted only if it provides substantial value that cannot be implemented cleanly with the existing platform.
-
-Forbidden architectural shortcuts:
-
-- direct calls to a vendor SDK from domain/service code;
-- provider-specific IDs as domain primary keys;
-- business rules encoded in prompt text only;
-- stringly-typed clinical rules without a schema/version;
-- silent fallback from failed rule parsing to “true”;
-- public file URLs;
-- health data in source control.
-
-## 11. Migration strategy
-
-Do not rewrite the prototype wholesale.
-
-Order:
-
-1. secure current boundaries;
-2. freeze product scope;
-3. introduce tests around retained behavior;
-4. create `PreparationCase` domain alongside legacy concepts;
-5. migrate one end-to-end preparation path;
-6. retire legacy chatbot/environment/pathway code only after the new path is functional;
-7. add integrations only after the standalone path demonstrates measurable field value.
+## Modules actifs
+
+### Préparation de consultation
+
+Le module `backend.preparation` possède le cas, les invitations et sessions
+patient, le motif déclaré, la pièce jointe bornée, les tâches humaines, la
+lecture professionnelle, la confirmation de préparation, l'audit et la clôture.
+
+Les transitions sont explicites. Une contribution patient n'est acceptée que si
+le cas, l'invitation et la session concordent et restent actifs après acquisition
+des verrous. Toute mutation pertinente incrémente la révision du cas.
+
+### Clinical Context Engine
+
+Le module `backend.clinicalcontext` transforme une donnée concrète du wedge — le
+motif déclaré par le patient — en faits cliniques atomiques réutilisables. Il ne
+contient aucune règle diagnostique.
+
+Un `ClinicalFact` comprend :
+
+- un identifiant opaque et le contexte de consultation propriétaire ;
+- un type explicite et une valeur typée ;
+- une période clinique optionnelle (`effectiveFrom`, `effectiveTo`) distincte de
+  l'instant de recueil (`recordedAt`), sans inventer une date absente ;
+- une provenance créée par le serveur ;
+- une certitude explicite, ici `NOT_ASSESSED` ;
+- un cycle de vie `CURRENT` ou `SUPERSEDED` ;
+- une revue humaine `UNREVIEWED`, `CONFIRMED` ou `REJECTED`, avec instant et
+  référence de relecteur opaque.
+
+La réécriture du même motif est idempotente. Une correction crée un nouveau fait
+courant et conserve l'ancien comme remplacé dans la même transaction que la
+mise à jour du cas et l'événement d'audit. Deux faits courants du même type pour
+un même contexte sont interdits par le domaine et la persistance.
+
+La revue humaine est enregistrée sur le fait et ne peut être remplacée : une
+correction exige une nouvelle version. Elle incrémente aussi la révision du cas
+et invalide toute confirmation de préparation antérieure. Elle n'apparaît pas
+encore dans la chronologie d'audit des actions de préparation.
+
+Cette tranche couvre un seul type de fait et un contexte par consultation. La
+fusion longitudinale multi-documents, les relations de contradiction et
+l'ingestion automatisée restent à implémenter ; le domaine est indépendant de
+Spring, mais les services de lecture et de revue restent adaptés au cas amont.
+
+L'export `twincare.clinical-context.v1` est un DTO stable et portable. Il expose
+les faits et leurs métadonnées utiles, jamais la référence patient ni
+l'organisation. Le contrat pourra devenir un adaptateur vers TwinCare, MedFlow
+ou CareOS sans introduire aujourd'hui une plateforme générique.
+
+## Préparation déterministe
+
+La décision opérationnelle de préparation professionnelle reste distincte de la
+complétude du seul contexte atomique exporté.
+
+La politique de préparation est pure, versionnée et déterministe. Elle produit
+un état parmi `INCOMPLETE`, `ACTION_REQUIRED`, `REVIEWABLE`, `READY` ou
+`NOT_APPLICABLE`, avec le jeu de règles et les preuves qui l'expliquent. Elle
+n'interprète pas le texte libre et ne dépend pas d'un LLM. Une incohérence ou
+une règle inconnue échoue fermée.
+
+Les tâches humaines sont bornées, typées et idempotentes. Leur création,
+affectation et résolution prennent le verrou du cas puis modifient sa révision.
+Le navigateur ne choisit jamais l'acteur effectif : il est dérivé de l'identité
+authentifiée et de l'appartenance active.
+
+Seul un médecin peut confirmer qu'un cas est prêt. La confirmation lie une
+preuve immuable à la révision effectivement relue. Toute modification ultérieure
+du motif, des tâches ou des pièces jointes invalide cette preuve sur les lectures
+suivantes.
+
+## Accès patient
+
+Une invitation est un justificatif d'amorçage à usage unique pour un seul cas.
+Son secret et celui de la session sont conservés sous forme de condensats HMAC
+séparés par domaine. L'échange atomique consomme l'invitation et crée une session
+courte.
+
+Le patient utilise un cookie `HttpOnly` dans une chaîne de sécurité dédiée, sans
+JWT. Le serveur déduit l'organisation, le cas et la portée ; les écritures
+vérifient aussi le CSRF. La reprise du motif renvoie le minimum exact nécessaire
+depuis cette même portée et reste en mémoire volatile dans le navigateur.
+
+La pièce jointe patient est un objet distinct, privé, limité à un PDF, JPEG ou
+PNG de 10 Mio maximum. L'adaptateur de stockage met les octets en quarantaine,
+coordonne promotion ou compensation avec la transaction et réconcilie les
+opérations interrompues au démarrage.
+
+## Accès professionnel
+
+Le contexte professionnel — organisations actives, rôles et capacités — est
+dérivé côté serveur. Le tenant choisi par le navigateur est indicatif ; chaque
+cas d'usage réautorise la ressource.
+
+L'espace professionnel suit un seul parcours responsive : liste bornée, détail
+structuré, tâches, téléchargement protégé, audit, confirmation puis clôture. Les
+lectures composites utilisent un instantané cohérent et la préparation affichée
+provient de la politique serveur.
+
+La création manuelle d'un cas est idempotente dans une organisation par UUID de
+requête et empreinte canonique du contenu. Un rejeu identique ne recrée ni cas ni
+audit ; un contenu différent avec le même UUID échoue. La création et l'émission
+de l'invitation sont deux capacités séparées. Le lien patient est remis dans le
+fragment d'URL, copié explicitement et jamais persisté par le frontend.
+
+Le téléchargement professionnel autorise d'abord l'appartenance clinique, puis
+verrouille le cas et la pièce jointe. L'adaptateur ouvre une seule fois l'objet
+final sans suivre les liens symboliques, vérifie taille et SHA-256 sur ce handle,
+termine la transaction, puis diffuse ce même handle.
+
+La clôture est réservée au médecin. Elle verrouille cas, invitations et sessions,
+exige la révision et la preuve de préparation exactes, enregistre une preuve
+immuable et révoque tous les accès patient dans une seule transaction. Un rejeu
+identique est sans effet ; une fermeture contradictoire échoue.
+
+## Audit
+
+La chronologie métier est append-only et séparée des logs techniques. Chaque
+événement utilise un type fermé, une version de schéma, un instant serveur, un
+acteur catégorisé, le périmètre organisation/cas, la révision persistée et au
+plus un identifiant technique de sujet.
+
+La mutation et son événement partagent la même transaction. Un échec d'audit
+annule la mutation ; un rejeu idempotent ou un no-op n'ajoute pas de preuve. Les
+lectures sont réservées au médecin, bornées, paginées par curseur et signalent
+explicitement un historique partiel pour les cas antérieurs à l'audit.
+
+## Surface HTTP V0.1
+
+La sécurité applique une liste positive méthode + chemin, terminée par
+`denyAll`. Les familles actives sont :
+
+- connexion professionnelle et découverte de son contexte ;
+- cas de préparation, tâches, confirmation, clôture et audit ;
+- création manuelle, invitations et téléchargement de pièce jointe ;
+- échange d'invitation et parcours patient borné ;
+- lecture et revue des faits du contexte clinique.
+
+L'administrateur d'organisation n'est pas un super-utilisateur clinique. Les API
+de prototype, la documentation interactive et toute route inconnue restent
+inaccessibles, même avec un rôle authentifié.
+
+## Persistance et migrations
+
+Flyway est l'unique mécanisme de changement de schéma. Les migrations V3 à V12
+construisent l'isolation organisationnelle, le parcours patient, les tâches,
+l'audit, la clôture et l'idempotence de création. V13 ajoute `clinical_fact` et
+reprend le motif courant existant avec sa provenance démontrable.
+
+Le domaine ne dépend pas de JPA. Les entités et repositories Spring Data restent
+dans les adaptateurs. Les écritures concurrentes utilisent verrous explicites,
+contraintes uniques et révisions optimistes selon le cas d'usage.
+
+## Démonstration locale
+
+Le profil `demo` remplace uniquement les frontières d'identité et de scénario.
+Il utilise le domaine, les services, Flyway, JPA et le contrat d'export réels avec
+des données strictement synthétiques. Un traitement d'environnement antérieur à
+l'initialisation de la datasource refuse toute adresse autre que `127.0.0.1` et
+toute URL autre que la base H2 isolée autorisée.
+
+La démonstration n'est pas un mode de production : elle n'a aucun fournisseur
+externe, ne charge aucune ressource distante et réinitialise son contexte borné.

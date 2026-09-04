@@ -2,6 +2,7 @@ package backend.dto;
 
 import backend.entity.TypeDocument;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 
@@ -11,7 +12,9 @@ public class DocumentUploadRequest {
     private TypeDocument type;
     @NotNull
     private LocalDate dateDocument;
+    @Size(max = 255)
     private String prescripteur;
+    @Size(max = 1000)
     private String commentairePatient;
 
     public TypeDocument getType() {

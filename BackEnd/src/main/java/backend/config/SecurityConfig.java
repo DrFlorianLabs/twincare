@@ -188,6 +188,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/organizations/*/preparation-cases/*/audit-events")
                         .hasAuthority("MEDECIN")
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/organizations/*/preparation-cases/*/clinical-context")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
+                        .requestMatchers(HttpMethod.PUT,
+                                "/api/v1/organizations/*/preparation-cases/*/clinical-context/facts/*/review")
+                        .hasAnyAuthority("ASSISTANT_MEDICAL", "MEDECIN")
                         .requestMatchers("/api/v1/organizations/**")
                         .denyAll()
                         .requestMatchers("/api/v1/**", "/api/**")

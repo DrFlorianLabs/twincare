@@ -399,6 +399,23 @@ class PatientInvitationApiSecurityIntegrationTest {
                 "PATIENT_ACCESS_STARTED",
                 "PATIENT_REASON_RECORDED");
 
+        Map<String, Object> fact = jdbcTemplate.queryForMap(
+                """
+                SELECT fact_kind, text_value, provenance, certainty,
+                       lifecycle_status, review_status, recorded_at
+                FROM clinical_fact
+                WHERE preparation_case_id = ? AND current_slot = 1
+                """,
+                caseId);
+        assertThat(fact)
+                .containsEntry("FACT_KIND", "CONSULTATION_REASON")
+                .containsEntry("TEXT_VALUE", "Fatigue synthétique depuis trois semaines")
+                .containsEntry("PROVENANCE", "PATIENT_DECLARED")
+                .containsEntry("CERTAINTY", "NOT_ASSESSED")
+                .containsEntry("LIFECYCLE_STATUS", "CURRENT")
+                .containsEntry("REVIEW_STATUS", "UNREVIEWED");
+        assertThat(fact.get("RECORDED_AT")).isNotNull();
+
         mockMvc.perform(get("/api/v1/patient-access/reason").cookie(sessionCookie(sessionToken)))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
@@ -592,6 +609,10 @@ class PatientInvitationApiSecurityIntegrationTest {
                 """,
                 Integer.class,
                 caseId)).isOne();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM clinical_fact WHERE preparation_case_id = ?",
+                Integer.class,
+                caseId)).isOne();
     }
 
     @RepeatedTest(3)
@@ -621,6 +642,24 @@ class PatientInvitationApiSecurityIntegrationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId))
                 .isEqualTo(initialVersion + 2);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM clinical_fact WHERE preparation_case_id = ?",
+                Integer.class,
+                caseId)).isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM clinical_fact
+                WHERE preparation_case_id = ? AND lifecycle_status = 'CURRENT'
+                """,
+                Integer.class,
+                caseId)).isOne();
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM clinical_fact
+                WHERE preparation_case_id = ? AND lifecycle_status = 'SUPERSEDED'
+                """,
+                Integer.class,
+                caseId)).isOne();
     }
 
     @RepeatedTest(3)
@@ -1290,6 +1329,7 @@ class PatientInvitationApiSecurityIntegrationTest {
         jdbcTemplate.update("DELETE FROM preparation_task");
         jdbcTemplate.update("DELETE FROM patient_access_session");
         jdbcTemplate.update("DELETE FROM patient_invitation");
+        jdbcTemplate.update("DELETE FROM clinical_fact");
         jdbcTemplate.update("DELETE FROM preparation_case");
         jdbcTemplate.update("DELETE FROM organization_membership");
         jdbcTemplate.update("DELETE FROM care_organization");

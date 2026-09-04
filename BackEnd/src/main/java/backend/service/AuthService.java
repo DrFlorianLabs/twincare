@@ -10,6 +10,7 @@ import backend.dao.AppUtilisateurRepository;
 import backend.dao.DossierPatientRepository;
 import backend.dto.AuthResponse;
 import backend.dto.LoginRequest;
+import backend.dto.PatientProvisioningResponse;
 import backend.dto.RegisterRequest;
 import backend.dto.ResetPasswordRequest;
 import backend.entity.AppUtilisateur;
@@ -51,7 +52,7 @@ public class AuthService {
      * Staff/admin provisioning must use a separate privileged workflow later.
      */
     @Transactional
-    public AuthResponse register(RegisterRequest req) {
+    public PatientProvisioningResponse register(RegisterRequest req) {
         securityHelperService.requireStaff();
         if (req.getEmail() == null || req.getEmail().isBlank()) {
             throw new BadRequestException("Email obligatoire");
@@ -82,18 +83,8 @@ public class AuthService {
         DossierPatient savedDossier = dossierRepo.save(dossier);
         saved.setDossierPatient(savedDossier);
 
-        var userDetails = userDetailsService.loadUserByUsername(saved.getEmail());
-        String token = jwtService.generateToken(userDetails);
-
         log.info("Patient account provisioned");
-        return new AuthResponse(
-                token,
-                saved.getEmail(),
-                saved.getRole().name(),
-                saved.getId(),
-                savedDossier.getId(),
-                saved.getPrenom(),
-                saved.getNom());
+        return new PatientProvisioningResponse(saved.getId(), savedDossier.getId());
     }
 
     public AuthResponse login(LoginRequest req) {
