@@ -65,6 +65,9 @@ public record PreparationAuditEvent(
             case ATTACHMENT_DOWNLOAD_AUTHORIZED_AND_VERIFIED ->
                     actorKind == PreparationAuditActorKind.STAFF
                             && hasSubject(subject, PreparationAuditSubjectType.ATTACHMENT);
+            case CLINICAL_FACT_CONFIRMED, CLINICAL_FACT_REJECTED ->
+                    actorKind == PreparationAuditActorKind.STAFF
+                            && hasSubject(subject, PreparationAuditSubjectType.CLINICAL_FACT);
             case TASK_CREATED, TASK_COMPLETED, TASK_CANCELLED ->
                     actorKind == PreparationAuditActorKind.STAFF
                             && hasSubject(subject, PreparationAuditSubjectType.PREPARATION_TASK);

@@ -313,6 +313,52 @@ class PreparationAuditRollbackIntegrationTest {
                 caseId)).isZero();
     }
 
+
+    @Test
+    void clinicalReviewAndVisibleRevisionRollBackWhenAuditFails() throws Exception {
+        UUID caseId = insertCase("PATIENT_STARTED", "clinical-review-rollback");
+        UUID factId = UUID.randomUUID();
+        Instant recordedAt = Instant.now().minusSeconds(60);
+        jdbcTemplate.update("""
+                UPDATE preparation_case SET status = 'COLLECTING',
+                    patient_reason = 'Motif fictif rollback', patient_reason_provenance = 'PATIENT_DECLARED',
+                    patient_reason_recorded_at = ?, updated_at = ? WHERE id = ?
+                """, recordedAt, recordedAt, caseId);
+        jdbcTemplate.update("""
+                INSERT INTO clinical_fact (
+                    id, organization_id, preparation_case_id, fact_kind, text_value,
+                    provenance, certainty, recorded_at, lifecycle_status, current_slot,
+                    review_status, version
+                ) VALUES (?, ?, ?, 'CONSULTATION_REASON', 'Motif fictif rollback',
+                    'PATIENT_DECLARED', 'NOT_ASSESSED', ?, 'CURRENT', 1, 'UNREVIEWED', 0)
+                """, factId, ORGANIZATION_ID, caseId, recordedAt);
+
+        mockMvc.perform(put("/api/v1/organizations/" + ORGANIZATION_ID
+                        + "/preparation-cases/" + caseId
+                        + "/clinical-context/facts/" + factId + "/review")
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"CONFIRM\"}"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT review_status FROM clinical_fact WHERE id = ?",
+                String.class, factId)).isEqualTo("UNREVIEWED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT reviewed_at IS NULL AND reviewer_reference IS NULL FROM clinical_fact WHERE id = ?",
+                Boolean.class, factId)).isTrue();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT version FROM clinical_fact WHERE id = ?",
+                Long.class, factId)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?",
+                Long.class, caseId)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM preparation_audit_event WHERE preparation_case_id = ?",
+                Integer.class, caseId)).isZero();
+    }
+
     private UUID insertCase(String status, String appointmentReference) {
         UUID caseId = UUID.randomUUID();
         Instant createdAt = Instant.now().minusSeconds(900);
@@ -346,6 +392,7 @@ class PreparationAuditRollbackIntegrationTest {
 
     private void clearData() {
         jdbcTemplate.update("DELETE FROM preparation_audit_event");
+        jdbcTemplate.update("DELETE FROM clinical_fact");
         jdbcTemplate.update("DELETE FROM preparation_case_closure");
         jdbcTemplate.update("DELETE FROM preparation_ready_confirmation");
         jdbcTemplate.update("DELETE FROM preparation_task");

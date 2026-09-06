@@ -6,6 +6,15 @@ corrections avec leur provenance, permet une validation humaine et exporte un
 contexte clinique portable. Elle ne pose pas de diagnostic, ne recommande pas de
 traitement et ne remplace pas le logiciel métier.
 
+L'espace professionnel affiche le motif avec sa source, sa date, sa revue et ses
+corrections. La vignette texte rassemble ces informations, les documents reçus
+et les tâches pour un transfert manuel dans le logiciel métier. Un motif rejeté
+est exclu du texte utilisable et bloque la confirmation de préparation. La copie
+et l'export vérifient la version relue.
+
+Le [point de reprise de septembre](docs/REPRISE_2026-09.md) explique les choix,
+les limites et les prochaines étapes proposées.
+
 > **Données fictives uniquement.** La démonstration locale efface et recrée son
 > scénario synthétique. N'y saisir aucune donnée réelle.
 
@@ -24,6 +33,10 @@ service cloud n'est nécessaire.
    le fait.
 5. Exporter le contexte JSON v1. Utiliser **Réinitialiser la démo** pour rejouer
    le scénario et **Arrêter la démo** en fin d'essai.
+
+Cette démo intégrée illustre le cycle du motif et son historique. La vignette
+texte avec tâches et documents est disponible dans l'espace professionnel Vue,
+qui utilise le backend normal et ses comptes autorisés.
 
 Les trois commandes Mac à la racine servent respectivement à lancer, arrêter et
 réinitialiser la démonstration. Le lancement écoute uniquement sur la boucle
@@ -54,7 +67,7 @@ Backend :
 
 ```sh
 cd BackEnd
-JAVA_HOME=$(/usr/libexec/java_home -v 21) ./mvnw clean verify
+JAVA_HOME=$(/usr/libexec/java_home -v 21) sh ./mvnw clean verify
 ```
 
 Interface patient :

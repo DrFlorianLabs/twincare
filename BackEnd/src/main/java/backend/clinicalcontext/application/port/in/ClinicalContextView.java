@@ -21,6 +21,7 @@ public record ClinicalContextView(
         String schemaVersion,
         ClinicalContextId contextId,
         PreparationCaseStatus preparationStatus,
+        long preparationRevision,
         Optional<Instant> scheduledAt,
         ContextReadiness readiness,
         List<PreparationItem> preparationItems,
@@ -34,6 +35,9 @@ public record ClinicalContextView(
         Objects.requireNonNull(schemaVersion, "Clinical context schema version is required");
         Objects.requireNonNull(contextId, "Clinical context identifier is required");
         Objects.requireNonNull(preparationStatus, "Preparation status is required");
+        if (preparationRevision < 0) {
+            throw new IllegalArgumentException("Preparation revision must be nonnegative");
+        }
         Objects.requireNonNull(scheduledAt, "Scheduled-at container is required");
         Objects.requireNonNull(readiness, "Context readiness is required");
         preparationItems = List.copyOf(preparationItems);

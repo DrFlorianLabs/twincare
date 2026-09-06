@@ -9,8 +9,8 @@ const labels = {
   UNREVIEWED: "À vérifier",
   CONFIRMED: "Confirmé",
   REJECTED: "Rejeté",
-  COMPLETE: "Complet",
-  INCOMPLETE: "Incomplet",
+  COMPLETE: "Motif reçu",
+  INCOMPLETE: "Motif attendu",
   NEEDS_CORRECTION: "À corriger",
   CONSULTATION_REASON: "Motif de consultation",
   PATIENT_ATTACHMENT: "Document patient",
@@ -194,9 +194,9 @@ function render() {
   if (!fact) {
     elements.reviewGuidance.textContent = "Revenez à la vue patient pour transmettre un motif fictif."
   } else if (reviewStatus === "UNREVIEWED") {
-    elements.reviewGuidance.textContent = "La provenance décrit l’origine ; elle ne vaut pas validation clinique."
+    elements.reviewGuidance.textContent = "Le motif est reçu, mais reste à vérifier. Sa présence ne signifie pas que la consultation est prête."
   } else if (reviewStatus === "CONFIRMED") {
-    elements.reviewGuidance.textContent = "Le motif a été confirmé par l’équipe médicale."
+    elements.reviewGuidance.textContent = "La formulation du patient a été confirmée. Cela ne constitue pas un diagnostic et ne modifie pas le degré de certitude."
   } else {
     elements.reviewGuidance.textContent = "Le motif doit être corrigé par le patient."
   }

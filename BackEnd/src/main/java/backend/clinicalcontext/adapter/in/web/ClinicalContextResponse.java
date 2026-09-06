@@ -8,6 +8,7 @@ public record ClinicalContextResponse(
         String schemaVersion,
         UUID contextId,
         String preparationStatus,
+        long preparationRevision,
         Instant scheduledAt,
         String readiness,
         List<PreparationItemResponse> preparationItems,

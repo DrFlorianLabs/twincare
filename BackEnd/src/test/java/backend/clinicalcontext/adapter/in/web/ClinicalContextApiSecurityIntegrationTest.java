@@ -88,6 +88,7 @@ class ClinicalContextApiSecurityIntegrationTest {
                 .andExpect(jsonPath("$.schemaVersion").value("twincare.clinical-context.v1"))
                 .andExpect(jsonPath("$.contextId").value(caseId.toString()))
                 .andExpect(jsonPath("$.preparationStatus").value("COLLECTING"))
+                .andExpect(jsonPath("$.preparationRevision").value(0))
                 .andExpect(jsonPath("$.readiness").value("COMPLETE"))
                 .andExpect(jsonPath("$.preparationItems[0].code").value("CONSULTATION_REASON"))
                 .andExpect(jsonPath("$.preparationItems[0].status").value("COMPLETED"))
@@ -136,6 +137,25 @@ class ClinicalContextApiSecurityIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(result -> assertThat(result.getResponse().getContentAsString())
                         .isEqualTo(firstResponse));
+
+        assertThat(firstCaseRevision).isEqualTo(1L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM preparation_audit_event WHERE preparation_case_id = ?",
+                Integer.class, caseId)).isEqualTo(1);
+        var event = jdbcTemplate.queryForMap(
+                "SELECT * FROM preparation_audit_event WHERE preparation_case_id = ?", caseId);
+        assertThat(event.get("event_type")).isEqualTo("CLINICAL_FACT_CONFIRMED");
+        assertThat(event.get("actor_kind")).isEqualTo("STAFF");
+        assertThat(((Number) event.get("actor_user_id")).longValue()).isEqualTo(physician.getId());
+        assertThat(((Number) event.get("case_revision")).longValue()).isEqualTo(firstCaseRevision);
+        assertThat(event.get("subject_type")).isEqualTo("CLINICAL_FACT");
+        assertThat(event.get("subject_id")).isEqualTo(factId);
+        assertThat(event.values()).doesNotContain("Motif synthétique à confirmer");
+        mockMvc.perform(get(contextEndpoint(ORGANIZATION_A, caseId))
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(physician)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.preparationRevision").value(firstCaseRevision))
+                .andExpect(jsonPath("$.facts[0].review.status").value("CONFIRMED"));
 
         assertThat(clinicalFactVersion(factId)).isEqualTo(firstVersion);
         assertThat(preparationCaseRevision(caseId)).isEqualTo(firstCaseRevision);
@@ -197,6 +217,12 @@ class ClinicalContextApiSecurityIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.readiness").value("NEEDS_CORRECTION"))
                 .andExpect(jsonPath("$.preparationItems[0].status").value("NEEDS_CORRECTION"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT event_type FROM preparation_audit_event WHERE preparation_case_id = ?",
+                String.class, rejectedCase)).isEqualTo("CLINICAL_FACT_REJECTED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT actor_user_id FROM preparation_audit_event WHERE preparation_case_id = ?",
+                Long.class, rejectedCase)).isEqualTo(assistant.getId());
     }
 
     @Test
@@ -268,6 +294,46 @@ class ClinicalContextApiSecurityIntegrationTest {
                         .content("{\"decision\":\"CONFIRM\"}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("CLINICAL_FACT_NOT_FOUND"));
+    }
+
+
+    @Test
+    void readyContextRejectsNewReviewAndAllowsAnIdenticalConfirmedReplay() throws Exception {
+        UUID caseId = insertCaseWithReason("Motif synthétique déjà prêt");
+        UUID factId = currentFactId(caseId);
+        String endpoint = reviewEndpoint(ORGANIZATION_A, caseId, factId);
+        jdbcTemplate.update("UPDATE preparation_case SET status = 'READY_FOR_CONSULTATION' WHERE id = ?",
+                caseId);
+
+        mockMvc.perform(put(endpoint)
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(physician))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"CONFIRM\"}"))
+                .andExpect(status().isConflict());
+        assertThat(clinicalFactVersion(factId)).isZero();
+        assertThat(preparationCaseRevision(caseId)).isZero();
+
+        jdbcTemplate.update("""
+                UPDATE clinical_fact
+                SET review_status = 'CONFIRMED', reviewed_at = ?, reviewer_reference = ?
+                WHERE id = ?
+                """, RECORDED_AT.plusSeconds(60), "local-user:" + physician.getId(), factId);
+        mockMvc.perform(put(endpoint)
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(physician))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"CONFIRM\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reviewedAt").value(RECORDED_AT.plusSeconds(60).toString()));
+        mockMvc.perform(put(endpoint)
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(physician))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"REJECT\"}"))
+                .andExpect(status().isConflict());
+        assertThat(clinicalFactVersion(factId)).isZero();
+        assertThat(preparationCaseRevision(caseId)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM preparation_audit_event WHERE preparation_case_id = ?",
+                Integer.class, caseId)).isZero();
     }
 
     private UUID insertCaseWithReason(String reason) {
@@ -368,6 +434,10 @@ class ClinicalContextApiSecurityIntegrationTest {
     }
 
     private void clearData() {
+        jdbcTemplate.update("DELETE FROM preparation_audit_event");
+        jdbcTemplate.update("DELETE FROM preparation_case_closure");
+        jdbcTemplate.update("DELETE FROM preparation_ready_confirmation");
+        jdbcTemplate.update("DELETE FROM preparation_task");
         jdbcTemplate.update("DELETE FROM clinical_fact");
         jdbcTemplate.update("DELETE FROM preparation_attachment");
         jdbcTemplate.update("DELETE FROM patient_access_session");

@@ -5,6 +5,7 @@ import java.util.Set;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import backend.clinicalcontext.application.port.out.AuthorizedClinicalReviewer;
 import backend.clinicalcontext.application.port.out.ClinicalFactReviewAuthorization;
 import backend.clinicalcontext.domain.ClinicalContextOwner;
 import backend.clinicalcontext.domain.ClinicalReviewerReference;
@@ -31,7 +32,7 @@ public final class DatabaseClinicalFactReviewAuthorization
     }
 
     @Override
-    public ClinicalReviewerReference requireClinicalReviewerAccess(ClinicalContextOwner owner) {
+    public AuthorizedClinicalReviewer requireClinicalReviewerAccess(ClinicalContextOwner owner) {
         AppUtilisateur currentUser = securityHelperService.getCurrentUser();
         if (!isClinicalStaff(currentUser.getRole())) {
             throw new UnauthorizedActionException("Accès clinique interdit");
@@ -48,7 +49,9 @@ public final class DatabaseClinicalFactReviewAuthorization
         if (membershipRole == null || !CLINICAL_MEMBERSHIP_ROLES.contains(membershipRole)) {
             throw new UnauthorizedActionException("Accès clinique interdit");
         }
-        return new ClinicalReviewerReference("local-user:" + currentUser.getId());
+        return new AuthorizedClinicalReviewer(
+                new ClinicalReviewerReference("local-user:" + currentUser.getId()),
+                currentUser.getId());
     }
 
     private boolean isClinicalStaff(Role role) {

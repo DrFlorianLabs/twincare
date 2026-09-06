@@ -80,6 +80,38 @@ class ProfessionalPreparationCommandApiIntegrationTest {
     }
 
     @Test
+    void rejectedCurrentReasonCannotBeDeclaredReady() throws Exception {
+        UUID caseId = insertCase(ORGANIZATION_A, "COLLECTING", "Synthetic exact reason");
+        insertClinicalReason(caseId, "REJECTED", true);
+
+        mockMvc.perform(put(readyEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(physician))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedRevision\":0}"))
+                .andExpect(status().isConflict());
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM preparation_ready_confirmation WHERE preparation_case_id = ?",
+                Integer.class, caseId)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT version FROM preparation_case WHERE id = ?", Long.class, caseId)).isZero();
+    }
+
+    @Test
+    void correctedUnreviewedReasonCanBePreparedDespiteARejectedHistoricalVersion() throws Exception {
+        UUID caseId = insertCase(ORGANIZATION_A, "COLLECTING", "Synthetic exact reason");
+        insertClinicalReason(caseId, "REJECTED", false);
+        insertClinicalReason(caseId, "UNREVIEWED", true);
+
+        mockMvc.perform(put(readyEndpoint(ORGANIZATION_A, caseId))
+                        .header("Authorization", bearerToken(physician))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedRevision\":0}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.caseStatus").value("READY_FOR_CONSULTATION"));
+    }
+
+    @Test
     void humanTaskThenClinicianConfirmationFormsAnIdempotentRevisionCheckedWorkflow() throws Exception {
         UUID caseId = insertCase(ORGANIZATION_A, "COLLECTING", "Synthetic exact reason");
         UUID requestId = UUID.randomUUID();
@@ -518,11 +550,28 @@ class ProfessionalPreparationCommandApiIntegrationTest {
         return id;
     }
 
+    private void insertClinicalReason(UUID caseId, String reviewStatus, boolean current) {
+        boolean reviewed = !"UNREVIEWED".equals(reviewStatus);
+        jdbcTemplate.update("""
+                INSERT INTO clinical_fact (
+                    id, organization_id, preparation_case_id, fact_kind, text_value,
+                    provenance, certainty, recorded_at, lifecycle_status, current_slot,
+                    superseded_at, review_status, reviewed_at, reviewer_reference, version
+                ) VALUES (?, ?, ?, 'CONSULTATION_REASON', ?, 'PATIENT_DECLARED', 'NOT_ASSESSED',
+                    ?, ?, ?, ?, ?, ?, ?, 0)
+                """,
+                UUID.randomUUID(), ORGANIZATION_A, caseId, "Synthetic exact reason", NOW,
+                current ? "CURRENT" : "SUPERSEDED", current ? 1 : null,
+                current ? null : NOW.plusSeconds(1), reviewStatus,
+                reviewed ? NOW : null, reviewed ? "synthetic-reviewer" : null);
+    }
+
     private void clearPreparationData() {
         jdbcTemplate.update("DELETE FROM preparation_audit_event");
         jdbcTemplate.update("DELETE FROM preparation_case_closure");
         jdbcTemplate.update("DELETE FROM preparation_ready_confirmation");
         jdbcTemplate.update("DELETE FROM preparation_task");
+        jdbcTemplate.update("DELETE FROM clinical_fact");
         jdbcTemplate.update("DELETE FROM preparation_attachment");
         jdbcTemplate.update("DELETE FROM patient_access_session");
         jdbcTemplate.update("DELETE FROM patient_invitation");

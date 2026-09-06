@@ -12,6 +12,17 @@ The default professional output is a concise clinical vignette plus explicit pen
 
 ## Mandatory product test
 
+Apply this order before adding or automating a workflow:
+
+1. Question the requirement and the existing workflow.
+2. Remove steps, duplicate entry and features whose value is unproven.
+3. Simplify what remains using existing modules and manual/local paths.
+4. Improve speed only once the simpler path is useful and reliable.
+5. Automate only a demonstrated, measurable need.
+
+Record material tradeoffs in `docs/`. A strategy proposal or historical prototype
+is not evidence that a new product boundary has been approved.
+
 Before implementing a feature, answer:
 
 1. What concrete problem does it solve?

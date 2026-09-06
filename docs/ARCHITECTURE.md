@@ -1,6 +1,6 @@
 # Architecture TwinCare V0.1
 
-Statut : document normatif. Dernière mise à jour : 4 septembre 2026.
+Statut : document normatif. Dernière mise à jour : 6 septembre 2026.
 
 ## Frontière produit et test de valeur
 
@@ -76,8 +76,11 @@ un même contexte sont interdits par le domaine et la persistance.
 
 La revue humaine est enregistrée sur le fait et ne peut être remplacée : une
 correction exige une nouvelle version. Elle incrémente aussi la révision du cas
-et invalide toute confirmation de préparation antérieure. Elle n'apparaît pas
-encore dans la chronologie d'audit des actions de préparation.
+et ajoute un événement `CLINICAL_FACT_CONFIRMED` ou `CLINICAL_FACT_REJECTED`, avec
+l'acteur et l'identifiant du fait, dans la même transaction. Un rejeu identique
+n'incrémente ni la révision ni l'audit. Après confirmation de préparation,
+une nouvelle revue est refusée pour conserver la preuve figée ; le rejeu
+identique reste possible. Le parcours de réouverture reste hors de cette tranche.
 
 Cette tranche couvre un seul type de fait et un contexte par consultation. La
 fusion longitudinale multi-documents, les relations de contradiction et
@@ -86,7 +89,14 @@ Spring, mais les services de lecture et de revue restent adaptés au cas amont.
 
 L'export `twincare.clinical-context.v1` est un DTO stable et portable. Il expose
 les faits et leurs métadonnées utiles, jamais la référence patient ni
-l'organisation. Le contrat pourra devenir un adaptateur vers TwinCare, MedFlow
+l'organisation. Son champ additif `preparationRevision` identifie la version du
+cas correspondant aux faits et au document. La lecture prend le même verrou de
+cas que les mutations, dans une transaction courte sans modifier les données ;
+elle garantit ainsi un instantané cohérent sur PostgreSQL et H2, au prix d'une
+sérialisation des opérations sur un même cas pendant cette lecture. Aucun appel
+externe ni rendu d'interface n'est réalisé sous ce verrou.
+
+Le contrat pourra devenir un adaptateur vers TwinCare, MedFlow
 ou CareOS sans introduire aujourd'hui une plateforme générique.
 
 ## Préparation déterministe
@@ -109,6 +119,12 @@ Seul un médecin peut confirmer qu'un cas est prêt. La confirmation lie une
 preuve immuable à la révision effectivement relue. Toute modification ultérieure
 du motif, des tâches ou des pièces jointes invalide cette preuve sur les lectures
 suivantes.
+
+Un motif courant rejeté interdit la confirmation, côté serveur et sous le verrou
+du cas. La préparation interroge un port `CurrentConsultationReasonReview`
+adapté au moteur de contexte. Une ancienne version rejetée n'interdit pas une
+nouvelle préparation sur un motif corrigé. La revue atomique n'est pas une étape
+obligatoire ajoutée à toutes les consultations.
 
 ## Accès patient
 
@@ -137,6 +153,21 @@ L'espace professionnel suit un seul parcours responsive : liste bornée, détail
 structuré, tâches, téléchargement protégé, audit, confirmation puis clôture. Les
 lectures composites utilisent un instantané cohérent et la préparation affichée
 provient de la politique serveur.
+
+La carte du motif utilise le contexte clinique : version courante, provenance,
+certitude, revue et historique replié. La copie texte assemble les informations
+enregistrées et les tâches, sans interprétation. Les anciennes versions et le
+motif rejeté sont exclus de la vignette utilisable ; l'export JSON composite
+conserve l'historique et les statuts explicites. Ce composite inclut la référence
+patient opaque de la préparation. Il n'est donc pas un export anonyme.
+Un document reçu est présenté comme reçu, sans prétendre en avoir analysé le contenu.
+
+Avant toute copie ou export, l'interface relit les deux vues et vérifie leur
+révision, leur périmètre et leur contenu. Une divergence, un accès retiré ou un
+contrat inconnu bloque l'export et impose une actualisation. Les résultats tardifs
+ne doivent pas réapparaître après changement de patient ou d'organisation.
+Cette vérification porte sur l'instantané relu ; elle ne promet pas une
+synchronisation continue avec le logiciel métier après la copie.
 
 La création manuelle d'un cas est idempotente dans une organisation par UUID de
 requête et empreinte canonique du contenu. Un rejeu identique ne recrée ni cas ni
@@ -187,6 +218,9 @@ Flyway est l'unique mécanisme de changement de schéma. Les migrations V3 à V1
 construisent l'isolation organisationnelle, le parcours patient, les tâches,
 l'audit, la clôture et l'idempotence de création. V13 ajoute `clinical_fact` et
 reprend le motif courant existant avec sa provenance démontrable.
+
+V14 étend les contraintes d'audit aux revues de faits cliniques. Les anciennes
+migrations restent inchangées.
 
 Le domaine ne dépend pas de JPA. Les entités et repositories Spring Data restent
 dans les adaptateurs. Les écritures concurrentes utilisent verrous explicites,

@@ -81,4 +81,28 @@ class PreparationAuditEventTest {
                 NOW, 9, Optional.empty()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+    @Test
+    void clinicalReviewRequiresAStaffActorAndTheReviewedFactIdentifier() {
+        var factId = UUID.randomUUID();
+        var subject = Optional.of(new PreparationAuditSubject(
+                PreparationAuditSubjectType.CLINICAL_FACT, factId));
+        for (var type : new PreparationAuditEventType[] {
+                PreparationAuditEventType.CLINICAL_FACT_CONFIRMED,
+                PreparationAuditEventType.CLINICAL_FACT_REJECTED }) {
+            var event = PreparationAuditEvent.staff(
+                    ORGANIZATION_ID, CASE_ID, type, 42, NOW, 8, subject);
+            assertThat(event.subject().orElseThrow().id()).isEqualTo(factId);
+            assertThatThrownBy(() -> PreparationAuditEvent.patient(
+                    ORGANIZATION_ID, CASE_ID, type, NOW, 8, subject))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> PreparationAuditEvent.staff(
+                    ORGANIZATION_ID, CASE_ID, type, 42, NOW, 8, Optional.empty()))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> PreparationAuditEvent.staff(
+                    ORGANIZATION_ID, CASE_ID, type, 42, NOW, 8,
+                    Optional.of(new PreparationAuditSubject(
+                            PreparationAuditSubjectType.PREPARATION_TASK, factId))))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
 }

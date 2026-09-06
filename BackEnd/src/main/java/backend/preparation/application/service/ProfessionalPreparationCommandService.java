@@ -19,6 +19,7 @@ import backend.preparation.application.port.in.CreatePreparationTaskUseCase;
 import backend.preparation.application.port.in.PreparationReadyConfirmationResult;
 import backend.preparation.application.port.in.PreparationTaskResult;
 import backend.preparation.application.port.out.PreparationCaseCapability;
+import backend.preparation.application.port.out.CurrentConsultationReasonReview;
 import backend.preparation.application.port.out.PreparationAuditEventStore;
 import backend.preparation.application.port.out.PreparationCaseRepository;
 import backend.preparation.application.port.out.PreparationReadyConfirmationRepository;
@@ -50,6 +51,7 @@ public final class ProfessionalPreparationCommandService implements
     private final PreparationTaskIdGenerator taskIdGenerator;
     private final PreparationAuditEventStore auditEvents;
     private final PreparationReadinessPolicy readinessPolicy;
+    private final CurrentConsultationReasonReview reasonReview;
     private final Clock clock;
 
     public ProfessionalPreparationCommandService(
@@ -60,6 +62,7 @@ public final class ProfessionalPreparationCommandService implements
             PreparationTaskIdGenerator taskIdGenerator,
             PreparationAuditEventStore auditEvents,
             PreparationReadinessPolicy readinessPolicy,
+            CurrentConsultationReasonReview reasonReview,
             Clock clock) {
         this.authorization = Objects.requireNonNull(authorization);
         this.preparationCases = Objects.requireNonNull(preparationCases);
@@ -68,6 +71,7 @@ public final class ProfessionalPreparationCommandService implements
         this.taskIdGenerator = Objects.requireNonNull(taskIdGenerator);
         this.auditEvents = Objects.requireNonNull(auditEvents);
         this.readinessPolicy = Objects.requireNonNull(readinessPolicy);
+        this.reasonReview = Objects.requireNonNull(reasonReview);
         this.clock = Objects.requireNonNull(clock);
     }
 
@@ -183,6 +187,11 @@ public final class ProfessionalPreparationCommandService implements
         long actorUserId = authorization.requireAccess(
                 command.organizationId(), PreparationCaseCapability.CONFIRM_READY_FOR_CONSULTATION);
         PreparationCase preparationCase = lockCase(command.organizationId(), command.caseId());
+        // Review and readiness mutations share the case lock. A rejected current
+        // reason must be corrected before this case can be declared ready.
+        if (reasonReview.isRejected(preparationCase.organizationId(), preparationCase.id())) {
+            throw new PreparationWorkflowConflictException();
+        }
         long openTaskCount = tasks.countOpen(preparationCase.id(), preparationCase.organizationId());
         var existing = confirmations.findByCase(preparationCase.id(), preparationCase.organizationId());
         if (existing.isPresent()) {

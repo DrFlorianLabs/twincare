@@ -15,6 +15,7 @@ import backend.clinicalcontext.application.service.GetClinicalContextService;
 import backend.clinicalcontext.application.service.RecordPatientDeclaredReasonFactService;
 import backend.clinicalcontext.application.service.ReviewClinicalFactService;
 import backend.preparation.application.port.out.PreparationAttachmentRepository;
+import backend.preparation.application.port.out.PreparationAuditEventStore;
 import backend.preparation.application.port.out.PreparationCaseCapability;
 import backend.preparation.application.port.out.ProfessionalPreparationAuthorization;
 import backend.preparation.application.port.out.PreparationCaseRepository;
@@ -37,6 +38,7 @@ public class ClinicalContextApplicationConfiguration {
             PreparationCaseRepository preparationCases,
             ClinicalFactRepository facts,
             PreparationAttachmentRepository attachments,
+            PreparationAuditEventStore auditEvents,
             Clock preparationClock) {
         GetClinicalContextUseCase get = new GetClinicalContextService(
                 owner -> preparationAuthorization.requireAccess(
@@ -50,6 +52,7 @@ public class ClinicalContextApplicationConfiguration {
                 reviewAuthorization,
                 preparationCases,
                 facts,
+                auditEvents,
                 preparationClock);
         return new TransactionalClinicalContextUseCases(get, review);
     }

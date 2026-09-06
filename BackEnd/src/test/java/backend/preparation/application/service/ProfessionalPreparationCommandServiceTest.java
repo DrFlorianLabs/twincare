@@ -22,6 +22,7 @@ import backend.preparation.application.port.in.ChangePreparationTaskStatusComman
 import backend.preparation.application.port.in.ConfirmPreparationReadyCommand;
 import backend.preparation.application.port.in.CreatePreparationTaskCommand;
 import backend.preparation.application.port.out.PreparationCaseCapability;
+import backend.preparation.application.port.out.CurrentConsultationReasonReview;
 import backend.preparation.application.port.out.PreparationCaseRepository;
 import backend.preparation.application.port.out.PreparationReadyConfirmationRepository;
 import backend.preparation.application.port.out.PreparationTaskIdGenerator;
@@ -58,6 +59,7 @@ class ProfessionalPreparationCommandServiceTest {
     private PreparationTaskRepository tasks;
     private PreparationReadyConfirmationRepository confirmations;
     private PreparationTaskIdGenerator taskIdGenerator;
+    private CurrentConsultationReasonReview reasonReview;
     private ProfessionalPreparationCommandService service;
 
     @BeforeEach
@@ -67,6 +69,7 @@ class ProfessionalPreparationCommandServiceTest {
         tasks = mock(PreparationTaskRepository.class);
         confirmations = mock(PreparationReadyConfirmationRepository.class);
         taskIdGenerator = mock(PreparationTaskIdGenerator.class);
+        reasonReview = mock(CurrentConsultationReasonReview.class);
         service = new ProfessionalPreparationCommandService(
                 authorization,
                 preparationCases,
@@ -75,12 +78,29 @@ class ProfessionalPreparationCommandServiceTest {
                 taskIdGenerator,
                 event -> { },
                 new PreparationReadinessPolicy(),
+                reasonReview,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         when(authorization.requireAccess(ORGANIZATION_ID, PreparationCaseCapability.MANAGE_PREPARATION_TASKS))
                 .thenReturn(42L);
         when(authorization.requireAccess(
                 ORGANIZATION_ID, PreparationCaseCapability.CONFIRM_READY_FOR_CONSULTATION))
                 .thenReturn(42L);
+    }
+
+    @Test
+    void rejectsReadinessConfirmationWhenTheCurrentReasonWasRejected() {
+        PreparationCase preparationCase = caseAt(PreparationCaseStatus.COLLECTING, 7);
+        when(preparationCases.findByIdForUpdate(CASE_ID, ORGANIZATION_ID))
+                .thenReturn(Optional.of(preparationCase));
+        when(reasonReview.isRejected(ORGANIZATION_ID, CASE_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.confirm(
+                new ConfirmPreparationReadyCommand(ORGANIZATION_ID, CASE_ID, 7)))
+                .isInstanceOf(PreparationWorkflowConflictException.class);
+
+        verify(preparationCases, never()).update(org.mockito.ArgumentMatchers.any());
+        verify(confirmations, never()).add(org.mockito.ArgumentMatchers.any());
+        assertThat(preparationCase.status()).isEqualTo(PreparationCaseStatus.COLLECTING);
     }
 
     @Test

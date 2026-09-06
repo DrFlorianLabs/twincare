@@ -43,7 +43,7 @@ class PreparationSchemaValidationTest {
                 """,
                 String.class);
 
-        assertThat(version).isEqualTo("13");
+        assertThat(version).isEqualTo("14");
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM patient_invitation", Integer.class))
                 .isZero();
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM patient_access_session", Integer.class))
