@@ -2,6 +2,11 @@
 
 Statut : document normatif. Dernière mise à jour : 6 septembre 2026.
 
+Lire d'abord le [concept opérationnel](CONCEPT_OPERATIONNEL.md) et la
+[feuille de route](ROADMAP.md). Les sections ci-dessous décrivent les mécanismes
+présents dans le code ; la section finale « Cible non implémentée » décrit les
+frontières à construire, pas des garanties déjà fournies.
+
 ## Frontière produit et test de valeur
 
 TwinCare prépare une consultation déjà réservée, entre la prise de rendez-vous
@@ -53,7 +58,7 @@ des verrous. Toute mutation pertinente incrémente la révision du cas.
 
 ### Clinical Context Engine
 
-Le module `backend.clinicalcontext` transforme une donnée concrète du wedge — le
+Le module `backend.clinicalcontext` transforme une donnée du premier usage — le
 motif déclaré par le patient — en faits cliniques atomiques réutilisables. Il ne
 contient aucune règle diagnostique.
 
@@ -142,6 +147,11 @@ La pièce jointe patient est un objet distinct, privé, limité à un PDF, JPEG 
 PNG de 10 Mio maximum. L'adaptateur de stockage met les octets en quarantaine,
 coordonne promotion ou compensation avec la transaction et réconcilie les
 opérations interrompues au démarrage.
+
+Il s'agit d'un accès à un cas créé et désigné par l'équipe, pas d'un portail
+générique de dépôt. La présence d'une invitation n'établit pas à elle seule
+l'identité médicale ; il n'existe actuellement ni vérification SMS intégrée ni
+file de rapprochement d'identité.
 
 ## Accès professionnel
 
@@ -236,3 +246,45 @@ toute URL autre que la base H2 isolée autorisée.
 
 La démonstration n'est pas un mode de production : elle n'a aucun fournisseur
 externe, ne charge aucune ressource distante et réinitialise son contexte borné.
+
+## Cible non implémentée — frontières de la prochaine réalisation
+
+Conserver le monolithe et ses contrats utiles. La séparation décrite ici relève
+des responsabilités, pas d'une demande de nouveaux microservices. Les noms
+ci-dessous sont des concepts de conception ; ce ne sont pas encore des classes,
+tables, routes ou états exposés par l'application.
+
+| Frontière cible | Responsabilité | Invariant à tester |
+| --- | --- | --- |
+| Dépôt non rattaché | Recevoir déclaration, récit et pièces dans une organisation, sans association à un patient existant. | Lien générique sans secret patient ; aucune recherche ou exposition d'un dossier au déclarant ; séparation des sessions. |
+| Décision de rapprochement | Un professionnel habilité associe un dépôt au bon patient et à la consultation ; doute et rejet restent explicites. | Auteur, instant et justification structurée tracés sans texte clinique dans l'audit ; doublon traité explicitement ; aucune fusion sur nom/date seulement. |
+| Transfert sas / local | Récupération sortante authentifiée, contrôle d'intégrité, réception durable et sauvegarde, accusé puis purge. | Reprise idempotente après panne ; pas de purge sur simple succès HTTP ; échec visible et traité avant échéance. |
+| Traitement de sources | Extraction/OCR isolé avec limites de ressources, éléments sourcés, version de traitement et brouillon optionnel. | Pas d'appel long sous verrou de cas ; résultat lié à la version exacte de la source ; résultat périmé non promu ; aucun effet clinique du modèle. |
+| Versement au dossier métier | Action explicite du médecin après vérification d'identité et transfert des éléments et pièces utiles. | Copie, confirmation de préparation, versement et clôture restent des événements distincts ; la purge ne dépend pas du seul bouton Copier. |
+
+Séparer trois dimensions : état technique du transfert, décision de rattachement
+et état clinique de préparation. Un dépôt peut être réceptionné durablement mais
+non rattaché ; il peut être rattaché sans être relu. Ne pas faire signifier à un
+unique booléen « prêt » ces trois choses différentes.
+
+Les coordonnées déclarées nécessaires au rapprochement restent dans un espace
+protégé distinct de la référence patient opaque du cas. Le téléphone vérifié ne
+devient ni identifiant national de santé ni preuve d'identité. L'identitovigilance
+et les besoins éventuels d'INS doivent être qualifiés pour le parcours retenu.
+
+Le sas distant, le connecteur de récupération et le traitement local devront
+partager des contrats versionnés, des limites et des preuves techniques minimales.
+L'organisation est dérivée de la configuration authentifiée, jamais d'un champ
+patient faisant autorité. L'anti-abus ne doit pas envoyer les données de santé à
+un service tiers non validé.
+
+Le moteur de sources conserve document, passage/page si disponible, date
+documentaire, date de réception, statut de traitement et version. Un modèle
+produit seulement une proposition ; le domaine valide le contrat, conserve les
+sources et laisse la revue au médecin. Le fait actuel `CONSULTATION_REASON`
+n'est pas détourné pour stocker un dossier entier ou un JSON médical libre.
+
+La cible d'exploitation est sas HDS en France + application locale gérée +
+sauvegarde séparée + dossier métier de référence. Elle n'est pas obtenue en
+exposant le profil `demo` sur Internet. Chiffrement, exploitation, confirmation
+de versement et conservation restent des travaux dédiés du [plan](ROADMAP.md).

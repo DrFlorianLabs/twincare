@@ -2,6 +2,11 @@
 
 Statut : règles normatives pour tout environnement TwinCare.
 
+Les protections existantes décrites ici ne constituent pas une homologation.
+Le [concept](CONCEPT_OPERATIONNEL.md) fixe la cible ; la [feuille de route](ROADMAP.md)
+liste les preuves encore nécessaires avant données réelles. Les exigences futures
+en fin de document ne sont pas présentées comme déjà implémentées.
+
 ## Principes non négociables
 
 - Ne jamais committer de donnée de santé réelle, export patient, document
@@ -123,6 +128,11 @@ La réponse force téléchargement, type autorisé, longueur exacte,
 
 ## Audit sans PHI
 
+« Sans PHI » désigne ici l'exclusion du contenu clinique et des identifiants
+directs, pas une anonymisation. Les liens techniques vers les cas ou acteurs
+peuvent demeurer des données personnelles ; l'audit doit donc lui-même être
+protégé, minimisé et soumis à une durée de conservation motivée.
+
 La chronologie métier append-only est distincte des logs applicatifs. Son schéma
 fermé autorise seulement : type d'événement, version, instant serveur, catégorie
 d'acteur, organisation/cas, révision persistée et éventuel identifiant technique
@@ -164,6 +174,53 @@ ne sont pas chiffrés par l'application. Un usage réel exige notamment TLS,
 chiffrement des volumes et sauvegardes, gestion des clés, exploitation de
 l'identité et validation des procédures de rétention/restauration. Ces exigences
 ne sont pas satisfaites par la seule écoute sur l'interface locale.
+
+### Exigences de la cible — non encore satisfaites
+
+- **Dépôt générique et identité.** Séparer l'entrée sans rattachement de la
+  session du cas actuel. Le code SMS prouve le contrôle du téléphone, pas
+  l'identité ; limiter tentatives, durée et reprises, sans révéler l'existence
+  d'un patient. Traiter homonymes et contacts partagés. Aucun accès au dossier
+  antérieur avant rapprochement humain et autorisation ; doute = blocage.
+- **Droits de l'équipe.** Établir les missions réelles et les droits minimaux,
+  y compris pour l'assistante. Les capacités du prototype ne prouvent pas une
+  habilitation juridique. Ne pas imposer une seconde validation clinique à une
+  personne dont le rôle ne l'autorise pas.
+- **Authentification et exploitation.** Comptes individuels, stratégie
+  d'authentification forte adaptée au risque, révocation, TLS, mises à jour,
+  sauvegarde et clés gérées. Examiner le risque XSS du JWT professionnel en
+  `sessionStorage` ; ne pas le présenter comme inaccessible au JavaScript.
+- **Sas et chaîne HDS.** Vérifier les activités et prestataires réellement
+  couverts, lieux de traitement et sous-traitants. Documenter l'exploitation
+  pour le compte des médecins, y compris locale ; ne pas réduire HDS au serveur.
+  Ne pas acheter ou déployer un service sur la seule base de cette documentation.
+- **Pièces et traitements.** La quarantaine transactionnelle et les signatures
+  de fichiers existantes ne sont pas une analyse antivirus. Avant traitement
+  automatique, définir antimalware, isolement OCR, limites de ressources et
+  traitement des fichiers suspects. Un contenu de document n'est jamais une
+  instruction exécutable ou une autorité pour le modèle.
+- **Flux externes.** Aucun contenu patient dans l'IA grand public, une dictée
+  distante non maîtrisée, les outils de mesure d'audience ou les espaces génériques
+  de partage. Un prestataire SMS reçoit uniquement les éléments nécessaires au
+  message neutre ; contrat, rétention et traces sont à vérifier.
+- **Réception durable et rétention.** Un accusé distant nécessite une écriture
+  locale durable et sa sauvegarde vérifiée. Tester interruption, doublon,
+  saturation, perte du poste, restauration et expiration sans remise. Pas de
+  purge sur simple téléchargement ; pas de conservation indéfinie en cas de panne.
+- **Versement.** Avant purge locale, vérifier que les éléments et sources utiles
+  ont rejoint le bon dossier métier. Ni copie, ni confirmation de préparation,
+  ni clôture actuelle ne suffisent à prouver ce versement.
+- **Politique de données.** Les durées proposées dans le concept sont à approuver,
+  avec sauvegardes, gels motivés, droits et procédure d'incident. Les futurs
+  effacements doivent être testés et répercutés lors d'une restauration.
+- **Cadre réglementaire.** Responsabilités, bases, information, AIPD et qualification
+  des fonctions au titre des dispositifs médicaux et de l'IA : preuves requises
+  dans la feuille de route. Human-in-the-loop, petite cohorte et pseudonymisation
+  ne justifient pas de supprimer ces examens.
+
+Ces obligations sont des critères de livraison à instruire avec l'appui
+compétent, pas une certification de TwinCare. Les références publiques sont
+rassemblées au plus près des décisions dans le [concept](CONCEPT_OPERATIONNEL.md).
 
 ## Vérifications avant livraison
 

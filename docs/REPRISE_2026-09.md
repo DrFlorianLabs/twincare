@@ -1,5 +1,10 @@
 # Reprise TwinCare — septembre 2026
 
+> Note historique de l'incrément intégré par la [PR #50](https://github.com/DrFlorianLabs/twincare/pull/50).
+> Pour les décisions actuelles, lire le [concept opérationnel](CONCEPT_OPERATIONNEL.md)
+> et la [feuille de route](ROADMAP.md). Les pistes de fin de note décrivent la
+> réflexion de cet incrément ; elles ne constituent pas un backlog parallèle.
+
 ## Décision de travail
 
 Faire de la préparation de consultation le premier usage utile. Le moteur de
@@ -66,7 +71,7 @@ préparation, une nouvelle revue est refusée : un parcours de réouverture devr
   ne constitue pas une autorisation de pilote réel ni une qualification de
   l'hébergement, du chiffrement au repos ou de la conformité réglementaire.
 
-## Prochaines étapes proposées
+## Pistes proposées lors de cet incrément — historique
 
 1. **Éprouver le parcours sur quelques cas fictifs.** Comparer lecture et transfert
    avec la pratique habituelle. Mesurer le temps de correction, pas seulement
