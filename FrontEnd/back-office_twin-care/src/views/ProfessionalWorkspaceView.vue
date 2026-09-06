@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 
+import ClinicalContextPanel from '../components/ClinicalContextPanel.vue'
 import NewPreparationDialog from '../components/NewPreparationDialog.vue'
 import PatientInvitationDialog from '../components/PatientInvitationDialog.vue'
 import PreparationCaseActions from '../components/PreparationCaseActions.vue'
@@ -61,6 +62,7 @@ const listLoading = ref(false)
 const listError = ref('')
 
 const preparation = ref(null)
+const clinicalContextAvailable = ref(false)
 const viewLoading = ref(false)
 const viewError = ref('')
 const feedback = ref(null)
@@ -138,6 +140,7 @@ const commandPolicy = computed(() => preparationCommandPolicy(preparation.value)
 const canConfirm = computed(() =>
   hasCapability('CONFIRM_READY_FOR_CONSULTATION')
   && commandPolicy.value.confirmReady
+  && clinicalContextAvailable.value
 )
 
 const canClose = computed(() =>
@@ -223,6 +226,7 @@ async function abandonPreparationCreation() {
 }
 
 function invalidateCaseScope() {
+  clinicalContextAvailable.value = false
   interactionEpoch += 1
   viewSequence += 1
   viewController?.abort()
@@ -287,6 +291,8 @@ function abortRequests() {
 }
 
 async function loadContext() {
+  const previousOrganizationId = selectedOrganizationId.value
+  invalidateOrganizationScope()
   const sequence = ++contextSequence
   contextController?.abort()
   contextController = new AbortController()
@@ -304,6 +310,9 @@ async function loadContext() {
     setSelectedOrganization(firstAccessible?.organizationId || '')
     if (!firstAccessible) {
       contextError.value = 'Aucune organisation clinique active n’est associée à votre compte.'
+    } else if (firstAccessible.organizationId === previousOrganizationId) {
+      await Promise.all([loadList(), route.params.caseId
+        ? loadPreparation(route.params.caseId) : Promise.resolve()])
     }
   } catch (error) {
     if (isCancelled(error) || sequence !== contextSequence) return
@@ -385,6 +394,28 @@ async function loadPreparation(caseId) {
     viewError.value = 'Le détail de la préparation est momentanément indisponible.'
   } finally {
     if (sequence === viewSequence) viewLoading.value = false
+  }
+}
+
+async function refreshClinicalContext(outcome) {
+  const scope = currentScopeKey()
+  const epoch = interactionEpoch
+  clinicalContextAvailable.value = false
+  const messages = {
+    CONFIRM: { type: 'success', text: 'Le motif a été confirmé après relecture.' },
+    REJECT: { type: 'warning', text: 'Le motif a été rejeté. Il doit être corrigé avant de confirmer la préparation.' },
+    CONFLICT: { type: 'warning', text: 'La préparation a changé. La vue est actualisée sans relancer la relecture.' },
+    EXPORT_CHANGED: { type: 'warning', text: 'La préparation a changé depuis votre lecture. Vérifiez la vue actualisée puis relancez la copie ou l’export.' }
+  }
+  feedback.value = messages[outcome] || null
+  await refreshCurrent(scope, epoch)
+}
+
+async function handleClinicalAccessError(error) {
+  if (await handleUnauthorized(error)) return
+  if (await handleForbidden(error)) return
+  if (professionalErrorKind(error) === 'NOT_FOUND') {
+    await refreshClinicalContext('RELOAD')
   }
 }
 
@@ -804,6 +835,8 @@ watch(taskLabel, () => {
 
 onMounted(loadContext)
 onBeforeUnmount(() => {
+  contextSequence += 1
+  invalidateOrganizationScope()
   creationEpoch += 1
   creationRequests.reset()
   abortRequests()
@@ -1112,23 +1145,15 @@ onBeforeUnmount(() => {
 
               <v-row>
                 <v-col cols="12" md="7">
-                  <v-card rounded="xl" elevation="1" class="h-100">
-                    <v-card-title class="px-5 pt-5">Demande du patient</v-card-title>
-                    <v-card-text class="px-5 pb-5">
-                      <template v-if="preparation.patientReason?.present">
-                        <v-chip size="small" color="info" variant="tonal" class="mb-4">
-                          Déclaré par le patient · non vérifié
-                        </v-chip>
-                        <p class="patient-reason">{{ preparation.patientReason.text }}</p>
-                        <p class="text-caption text-medium-emphasis mt-4">
-                          Reçu le {{ formatDateTime(preparation.patientReason.recordedAt) }}
-                        </p>
-                      </template>
-                      <v-alert v-else type="warning" variant="tonal">
-                        Le patient n’a pas encore renseigné le motif de consultation.
-                      </v-alert>
-                    </v-card-text>
-                  </v-card>
+                  <ClinicalContextPanel
+                    :organization-id="selectedOrganizationId"
+                    :actor-user-id="context.actorUserId"
+                    :capabilities="selectedOrganization?.capabilities || []"
+                    :preparation="preparation"
+                    @availability="clinicalContextAvailable = $event"
+                    @refresh="refreshClinicalContext"
+                    @access-error="handleClinicalAccessError"
+                  />
                 </v-col>
 
                 <v-col cols="12" md="5">
