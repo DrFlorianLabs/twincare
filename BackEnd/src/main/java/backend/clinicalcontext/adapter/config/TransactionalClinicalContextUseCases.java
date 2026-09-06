@@ -23,7 +23,9 @@ class TransactionalClinicalContextUseCases
     }
 
     @Override
-    @Transactional(readOnly = true)
+    // SELECT FOR UPDATE requires a writable transaction in PostgreSQL.
+    // This short transaction only reads; the lock prevents a mixed-revision context.
+    @Transactional
     public ClinicalContextView get(GetClinicalContextQuery query) {
         return getDelegate.get(query);
     }

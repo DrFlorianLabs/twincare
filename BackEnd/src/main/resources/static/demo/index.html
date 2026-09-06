@@ -19,7 +19,7 @@
         <span class="brand-mark" aria-hidden="true">TC</span>
         <span><strong>TwinCare</strong><small>Préparer avant de consulter</small></span>
       </a>
-      <span class="local-pill">Mode local sécurisé</span>
+      <span class="local-pill">Démonstration locale</span>
     </header>
 
     <main>
@@ -53,7 +53,7 @@
         <div class="workspace-heading">
           <div>
             <p class="eyebrow">Patient fictif · consultation de démonstration</p>
-            <h2 id="patient-title">Quel est le motif de la consultation&nbsp;?</h2>
+            <h2 id="patient-title">Qu’aimeriez-vous aborder pendant la consultation&nbsp;?</h2>
           </div>
           <span id="patient-progress" class="status-chip status-neutral">À compléter</span>
         </div>
@@ -62,7 +62,7 @@
           <label for="reason">Motif fictif</label>
           <textarea id="reason" name="reason" rows="5" maxlength="4000" required aria-describedby="reason-help reason-count" placeholder="Écrivez uniquement un exemple inventé…"></textarea>
           <div class="field-footer">
-            <span id="reason-help">Une phrase suffit. Vous pourrez la modifier ensuite.</span>
+            <span id="reason-help">Dans cet exemple inventé, décrivez ce qui vous préoccupe, depuis quand et ce que vous attendez. Pas besoin de connaître les termes médicaux.</span>
             <span id="reason-count">0 / 4000</span>
           </div>
           <div class="form-actions">
@@ -109,7 +109,7 @@
             <h3>À vérifier avant la consultation</h3>
             <ul id="preparation-items" class="preparation-list"></ul>
             <div class="readiness-line">
-              <span>Niveau de préparation</span>
+              <span>Recueil du motif</span>
               <strong id="readiness">Incomplet</strong>
             </div>
           </article>
@@ -130,7 +130,7 @@
         <div class="export-row">
           <div>
             <strong>Contexte portable</strong>
-            <p>Téléchargez exactement le contrat <code>twincare.clinical-context.v1</code>.</p>
+            <p>Téléchargez les informations avec leur provenance et leur historique.</p>
           </div>
           <a id="export-link" class="button button-secondary" href="/demo/api/export" download>Télécharger le JSON</a>
         </div>

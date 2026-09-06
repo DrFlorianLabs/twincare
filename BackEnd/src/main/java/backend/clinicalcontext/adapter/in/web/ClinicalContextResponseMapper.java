@@ -46,6 +46,7 @@ public final class ClinicalContextResponseMapper {
                 view.schemaVersion(),
                 view.contextId().value(),
                 view.preparationStatus().name(),
+                view.preparationRevision(),
                 view.scheduledAt().orElse(null),
                 view.readiness().name(),
                 items,

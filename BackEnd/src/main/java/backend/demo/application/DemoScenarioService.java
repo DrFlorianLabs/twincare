@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import backend.clinicalcontext.application.port.in.ClinicalContextView;
+import backend.clinicalcontext.application.port.out.AuthorizedClinicalReviewer;
 import backend.clinicalcontext.application.port.in.GetClinicalContextQuery;
 import backend.clinicalcontext.application.port.in.GetClinicalContextUseCase;
 import backend.clinicalcontext.application.port.in.RecordPatientDeclaredReasonFactCommand;
@@ -46,6 +47,7 @@ public class DemoScenarioService {
             UUID.fromString("00000000-0000-0000-0000-000000000006"));
 
     private static final Instant DEMO_CREATED_AT = Instant.parse("2026-01-15T08:00:00Z");
+    private static final long DEMO_REVIEWER_ID = 1L;
     private static final Instant DEMO_STARTED_AT = Instant.parse("2026-01-15T08:01:00Z");
     private static final Instant DEMO_SCHEDULED_AT = Instant.parse("2099-01-15T10:00:00Z");
 
@@ -82,10 +84,12 @@ public class DemoScenarioService {
         this.factReviewer = new ReviewClinicalFactService(
                 owner -> {
                     requireDemoOwner(owner);
-                    return new ClinicalReviewerReference("demo-clinician");
+                    return new AuthorizedClinicalReviewer(
+                            new ClinicalReviewerReference("demo-clinician"), DEMO_REVIEWER_ID);
                 },
                 preparationCases,
                 facts,
+                auditEvents,
                 clock);
     }
 
@@ -102,12 +106,30 @@ public class DemoScenarioService {
         jdbcTemplate.update("DELETE FROM patient_invitation");
         jdbcTemplate.update("DELETE FROM preparation_case");
         jdbcTemplate.update("DELETE FROM organization_membership");
+        jdbcTemplate.update("DELETE FROM app_utilisateur WHERE id = ?", DEMO_REVIEWER_ID);
         jdbcTemplate.update("DELETE FROM care_organization");
         jdbcTemplate.update(
                 "INSERT INTO care_organization (id, display_name, created_at) VALUES (?, ?, ?)",
                 DEMO_ORGANIZATION.value(),
                 "Cabinet de démonstration",
                 DEMO_CREATED_AT);
+
+        // A synthetic membership keeps the real audit foreign keys active.
+        // The deliberately invalid password hash cannot authenticate this identity.
+        jdbcTemplate.update("""
+                INSERT INTO app_utilisateur (
+                    id, nom, prenom, date_naissance, email, mot_de_passe, role, sexe
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                DEMO_REVIEWER_ID, "Démonstration", "Médecin", java.time.LocalDate.of(1990, 1, 1),
+                "demo-clinician@synthetic.invalid", "!disabled-demo-account", "MEDECIN", "NON_PRECISE");
+        jdbcTemplate.update("""
+                INSERT INTO organization_membership (
+                    id, organization_id, user_id, membership_role, active, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                UUID.fromString("00000000-0000-0000-0000-000000000007"),
+                DEMO_ORGANIZATION.value(), DEMO_REVIEWER_ID, "CLINICIAN", true, DEMO_CREATED_AT);
 
         PreparationCase preparationCase = PreparationCase.create(
                 DEMO_CASE_ID,
@@ -121,7 +143,7 @@ public class DemoScenarioService {
         return read();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ClinicalContextView read() {
         environmentGuard.requireSafeDemoEnvironment();
         return contextReader.get(new GetClinicalContextQuery(DEMO_ORGANIZATION, DEMO_CASE_ID));

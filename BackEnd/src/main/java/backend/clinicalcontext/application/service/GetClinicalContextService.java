@@ -52,8 +52,10 @@ public final class GetClinicalContextService implements GetClinicalContextUseCas
         Objects.requireNonNull(query, "Clinical context query is required");
         authorization.requireClinicalContextAccess(
                 new ClinicalContextOwner(query.organizationId().value()));
+        // Every visible-content writer locks this aggregate first. Hold that same
+        // lock until all context parts are loaded, including on the H2 demo database.
         PreparationCase preparationCase = preparationCases
-                .findById(query.preparationCaseId(), query.organizationId())
+                .findByIdForUpdate(query.preparationCaseId(), query.organizationId())
                 .orElseThrow(ClinicalContextNotFoundException::new);
 
         ClinicalContextId contextId = new ClinicalContextId(preparationCase.id().value());
@@ -70,6 +72,7 @@ public final class GetClinicalContextService implements GetClinicalContextUseCas
                 ClinicalContextView.SCHEMA_VERSION,
                 contextId,
                 preparationCase.status(),
+                preparationCase.revision(),
                 preparationCase.scheduledAt(),
                 readiness(currentReason),
                 preparationItems(currentReason, attachment),

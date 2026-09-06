@@ -58,6 +58,7 @@ import backend.preparation.application.service.RecordPatientReasonService;
 import backend.preparation.application.service.PatientAttachmentScopeLock;
 import backend.preparation.application.service.ProfessionalPreparationQueryService;
 import backend.preparation.application.service.ProfessionalPreparationCommandService;
+import backend.preparation.application.port.out.CurrentConsultationReasonReview;
 import backend.preparation.application.service.PutPatientAttachmentCoordinator;
 import backend.preparation.application.service.RevokePatientInvitationService;
 import backend.preparation.application.service.ResolvePatientAccessSessionService;
@@ -222,6 +223,7 @@ public class PreparationApplicationConfiguration {
             PreparationReadyConfirmationRepository confirmations,
             PreparationTaskIdGenerator taskIdGenerator,
             PreparationAuditEventStore auditEvents,
+            CurrentConsultationReasonReview reasonReview,
             Clock preparationClock) {
         var service = new ProfessionalPreparationCommandService(
                 authorization,
@@ -231,6 +233,7 @@ public class PreparationApplicationConfiguration {
                 taskIdGenerator,
                 auditEvents,
                 new PreparationReadinessPolicy(),
+                reasonReview,
                 preparationClock);
         return new TransactionalProfessionalPreparationCommands(service, service, service);
     }

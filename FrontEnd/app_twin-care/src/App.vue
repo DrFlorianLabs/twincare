@@ -94,7 +94,10 @@ watch(
         <label for="consultation-reason">
           En quelques mots, qu’aimeriez-vous aborder pendant cette consultation&nbsp;?
         </label>
-        <p id="reason-help" class="field-help">Une ou deux phrases suffisent.</p>
+        <p id="reason-help" class="field-help">
+          Décrivez avec vos mots ce qui vous préoccupe, depuis quand et ce que vous attendez
+          de la consultation. Vous pouvez dire que vous ne savez pas comment l’expliquer.
+        </p>
         <textarea
           id="consultation-reason"
           v-model="state.draft"

@@ -3,5 +3,6 @@ package backend.preparation.domain;
 public enum PreparationAuditSubjectType {
     INVITATION,
     ATTACHMENT,
-    PREPARATION_TASK
+    PREPARATION_TASK,
+    CLINICAL_FACT
 }
